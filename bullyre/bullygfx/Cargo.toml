@@ -1,0 +1,24 @@
+[package]
+name = "bullygfx"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "d3d9"
+crate-type = ["cdylib"]
+
+[dependencies]
+log = "0.4"
+png = "0.17"
+pollster = "1.0.1"
+raw-window-handle = "0.6.2"
+texpresso = { version = "2.0.2", features = ["rayon"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["dx12", "vulkan", "wgsl"] }
+
+[profile.release]
+opt-level = 3
+panic = "unwind"
+debug = "line-tables-only"
+
+[dev-dependencies]
+naga = { version = "30.0.1", features = ["wgsl-in"] }

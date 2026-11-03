@@ -1,0 +1,572 @@
+// The track registry's filling (0x1B6565C, the name -> factory table the action tree's
+// loader builds its tracks with): 0x6502B0 every track (446 of them), then 0x64FA20 the
+// Butes objects (49 tuning sets loaded like tracks). An entry: +0 the name's key, +4 New
+// (cdecl: allocated and built, for code), +8 CreateAt (cdecl: built in place in the
+// loaded tree's memory); the factories are in TrackFactories.cpp and ButesObjects.cpp.
+
+#include <cstdint>
+
+#include "game/ActionFactories.h"
+
+using namespace actfac;
+
+namespace {
+
+GAME_FN(void, __thiscall, Registry_Reserve, 0x0061A690, void* registry);
+GAME_FN(void, __thiscall, Registry_Add, 0x0061A700, void* registry, uint32_t* entry);
+GAME_FN(uint32_t*, __thiscall, NameKey_Default, 0x0066BEA0, uint32_t* key);
+GAME_FN(void, __thiscall, NameKey_FromString, 0x005FA890, uint32_t* key, const char* name);
+GAME_FN(void, __cdecl, RegisterButes, 0x0064FA20, void* registry);
+inline void* const trackRegistry = reinterpret_cast<void*>(0x01B6565C);
+
+// a registry row: its name (a string of the game's), New, CreateAt, and the global key the
+// name is also kept in
+struct TrackRow {
+    uint32_t name;
+    uint32_t make;
+    uint32_t createAt;
+    uint32_t key;
+};
+
+// (the game builds these tables on the stack, row by row, before its loops)
+const TrackRow kTrackRows[] = {
+    {0x00939B90, 0x0063D550, 0x00630CE0, 0x01B65840},  // ActionRequest
+    {0x00939B7C, 0x0063D590, 0x00630D00, 0x01B65848},  // ActionNodeRequest
+    {0x0093BB20, 0x0063D5D0, 0x00630D60, 0x01B651BC},  // ActivateDoor
+    {0x0093BB14, 0x0064B140, 0x0064A7A0, 0x01B64A3C},  // NISobject
+    {0x0093BB04, 0x0063D600, 0x00630D80, 0x01B6517C},  // AttachedEffect
+    {0x0093BAF4, 0x0063D650, 0x00630DB0, 0x01B65178},  // DetachEffect
+    {0x0093BAE8, 0x0063D6A0, 0x00630DE0, 0x01B65184},  // fxBreath
+    {0x0093BADC, 0x0063D6F0, 0x00630E20, 0x01B65188},  // fxCeiling
+    {0x0093BAD4, 0x0063D730, 0x00630E50, 0x01B6518C},  // fxDecal
+    {0x0093BAC4, 0x0063D780, 0x00630E80, 0x01B65194},  // fxWaterRipples
+    {0x0093BAB4, 0x0063D7D0, 0x00630EC0, 0x01B65198},  // GroundImpact
+    {0x0093BAA8, 0x0063D820, 0x00630EF0, 0x01B6519C},  // WallImpact
+    {0x0093BA98, 0x0063D870, 0x00630F20, 0x01B651A0},  // FXWeaponImpact
+    {0x0093BA8C, 0x0063D8C0, 0x00630F60, 0x01B65140},  // AddForce
+    {0x0093BA7C, 0x0063D900, 0x00630F80, 0x01B65144},  // AddTurnForce
+    {0x0093BA70, 0x0063D940, 0x00630FA0, 0x01B65740},  // AIUpdate
+    {0x0090B55C, 0x0063D980, 0x00630FC0, 0x01B65054},  // Animation
+    {0x0093BA58, 0x0063D9D0, 0x00630FF0, 0x01B65070},  // AnimationDriverSteer
+    {0x0093BA40, 0x0063DA10, 0x00631010, 0x01B65074},  // AnimationDriverStruggle
+    {0x0093BA24, 0x0063DA50, 0x00631030, 0x01B65078},  // AnimationDriverTargetSync
+    {0x0093BA04, 0x0063DA90, 0x00631050, 0x01B6507C},  // ParametricAnimationController
+    {0x00931868, 0x0063DAD0, 0x00631070, 0x01B65084},  // AIAimParametricTrack
+    {0x0093B9F0, 0x006310A0, 0x006310D0, 0x01B65080},  // ParametricTracker
+    {0x0093B9D4, 0x0063DB20, 0x006310E0, 0x01B65088},  // SpudCannonFireController
+    {0x0093B9BC, 0x0063DB60, 0x00631100, 0x01B65050},  // AnimationGroupRelease
+    {0x0093B9A4, 0x0063DBA0, 0x00631130, 0x01B6508C},  // AnimationDoorControl
+    {0x0093B990, 0x0064A7B0, 0x0063DBE0, 0x01B650BC},  // AnimationLocoSync
+    {0x00939A90, 0x0063DC20, 0x00631150, 0x01B65090},  // AnimationParametric
+    {0x0093B974, 0x0063DC70, 0x006311B0, 0x01B65098},  // AnimationReverseParametric
+    {0x0093B964, 0x0063DCC0, 0x006311F0, 0x01B6580C},  // AttackOnBike
+    {0x0093B958, 0x0063DD00, 0x00631210, 0x01B65810},  // StealBike
+    {0x0090DDB8, 0x0063DD40, 0x00631230, 0x01B6583C},  // Attack
+    {0x0093B94C, 0x0063DD80, 0x00631280, 0x01B65884},  // AttackProp
+    {0x0090E604, 0x0063DDC0, 0x006312E0, 0x01B65888},  // AttackVehicle
+    {0x0093B938, 0x0063DE00, 0x00631340, 0x01B65868},  // AttackPropObjective
+    {0x0093B920, 0x0063DE40, 0x00631390, 0x01B6586C},  // AttackVehicleObjective
+    {0x0093B910, 0x0063DE80, 0x006313E0, 0x01B65864},  // AttackObjective
+    {0x0093B908, 0x0063DEC0, 0x00631430, 0x01B65850},  // Block
+    {0x0093B8FC, 0x0063DF00, 0x00631450, 0x01B657F0},  // CheerFight
+    {0x00906310, 0x0064B180, 0x0064A800, 0x01B64A5C},  // Collision
+    {0x0090AFBC, 0x0063DFE0, 0x006314D0, 0x01B65834},  // CombatLoco
+    {0x00932A30, 0x0063E040, 0x00631510, 0x01B65744},  // Controller
+    {0x0093B8EC, 0x0063E080, 0x00631530, 0x01B65754},  // CreateStimulus
+    {0x0093B8DC, 0x0063E0C0, 0x00631550, 0x01B65758},  // ClearStimulus
+    {0x0093984C, 0x0063E100, 0x00631570, 0x01B65148},  // Damage
+    {0x0093B8CC, 0x0063E140, 0x00631590, 0x01B65244},  // DamageFalling
+    {0x0093B8B8, 0x0063E190, 0x006315C0, 0x01B65248},  // DamageFallingHandle
+    {0x0093B898, 0x0063E1D0, 0x006315E0, 0x01B65760},  // DeteriorateAttitudeToAttacker
+    {0x0093B884, 0x0063E210, 0x00631630, 0x01B65860},  // DisableFightTokens
+    {0x0093B87C, 0x0063E250, 0x00631650, 0x01B65818},  // Dock
+    {0x0093B868, 0x0063E290, 0x006316A0, 0x01B6585C},  // EnableFightTokens
+    {0x0093B860, 0x0063E2D0, 0x006316F0, 0x01B65854},  // Evade
+    {0x0090E318, 0x0063E310, 0x00631740, 0x01B65154},  // Death
+    {0x0090E388, 0x0064A820, 0x0063E3A0, 0x01B64A34},  // Execute
+    {0x0093B854, 0x0063E3D0, 0x00631760, 0x01B64A38},  // ExecuteDoor
+    {0x0093B840, 0x0063E410, 0x00631780, 0x01B657D4},  // FaceHitDirection
+    {0x0093B830, 0x0063E450, 0x006317A0, 0x01B65830},  // FaceObjective
+    {0x0093B820, 0x0063E490, 0x006317C0, 0x01B657A4},  // FaceStimulus
+    {0x0093B814, 0x0063E4D0, 0x006317E0, 0x01B657C8},  // FaceTarget
+    {0x0093B800, 0x0063E510, 0x00631800, 0x01B657CC},  // FaceVehicleForEntry
+    {0x0093B7F0, 0x0063E550, 0x00631820, 0x01B657D0},  // FaceDiveEntity
+    {0x0093B7E4, 0x0063E590, 0x00631840, 0x01B657A8},  // LookAround
+    {0x0090E56C, 0x0063E5D0, 0x00631860, 0x01B6578C},  // Flee
+    {0x0090E5AC, 0x0063E620, 0x00631890, 0x01B65800},  // FollowFocus
+    {0x0093B7D0, 0x0063E660, 0x006318B0, 0x01B65804},  // FollowFocusOnBike
+    {0x0093B7BC, 0x0063E6A0, 0x006318D0, 0x01B65808},  // FollowTargetOnBike
+    {0x0090E5F8, 0x0064A870, 0x0063E710, 0x01B657F4},  // FollowPath
+    {0x0090E5E4, 0x0063E750, 0x006318F0, 0x01B657F8},  // FleeOnPathOnBike
+    {0x0090E598, 0x0063E7B0, 0x00631930, 0x01B657FC},  // FleeOnRoadOnBike
+    {0x0093B7A4, 0x0063E7F0, 0x00631970, 0x01B65AF8},  // VehicleFlagForAction
+    {0x0093B794, 0x0064A8D0, 0x0063E860, 0x01B65B00},  // GetOffVehicle
+    {0x0093B784, 0x0063E890, 0x006319B0, 0x01B65AFC},  // GetOnVehicle
+    {0x0093B770, 0x0063E8D0, 0x006319F0, 0x01B65B24},  // FPPassengerGetOn
+    {0x0093B75C, 0x0063E910, 0x00631A30, 0x01B65B28},  // FPPassengerGetOff
+    {0x0093B750, 0x0064A910, 0x0063E990, 0x01B65B30},  // FreezeBike
+    {0x0093B740, 0x0064A950, 0x0063EA00, 0x01B65B34},  // BlendBikeToPos
+    {0x0093B72C, 0x0063EA30, 0x00631A50, 0x01B65770},  // GiveTargetToFocus
+    {0x0093B70C, 0x0063EA70, 0x00631A70, 0x01B65774},  // GivePunishmentPointsToTarget
+    {0x0093B704, 0x0063EAE0, 0x00631AA0, 0x01B650C4},  // Gravity
+    {0x0093B6FC, 0x0063EB20, 0x00631AC0, 0x01B6581C},  // Greet
+    {0x0093B6F4, 0x0063EB60, 0x00631AE0, 0x01B65750},  // Wrestle
+    {0x0093B6E8, 0x0063EBB0, 0x00631B10, 0x01B65788},  // HaltVehicle
+    {0x0093B6D8, 0x0063EBF0, 0x00631B30, 0x01B65150},  // DamageHandle
+    {0x0093B6D0, 0x0063EC30, 0x00631B50, 0x01B65790},  // HangOut
+    {0x0090DF60, 0x0063EC70, 0x00631B70, 0x01B65794},  // Spectator
+    {0x0093B6C0, 0x0063ECB0, 0x00631B90, 0x01B6505C},  // HitAnimation
+    {0x0093B6B4, 0x0063ED00, 0x00631BD0, 0x01B65060},  // HitReact
+    {0x0090E61C, 0x0063ED40, 0x00631C00, 0x01B65748},  // Idle
+    {0x0093B6A8, 0x0064A9A0, 0x0063ED80, 0x01B650E0},  // IkAttach
+    {0x0093B69C, 0x0063EDC0, 0x00631C20, 0x01B650E4},  // IkDetach
+    {0x0093B690, 0x0063EE00, 0x00631C50, 0x01B65064},  // JointDriver
+    {0x0093B678, 0x0063EE60, 0x00631CC0, 0x01B6506C},  // JointDriverParametric
+    {0x0093B66C, 0x0063EED0, 0x00631D10, 0x01B650A0},  // Locomotion
+    {0x0093B654, 0x00631D50, 0x00631D90, 0x01B650B8},  // LocomotionAnimationNew
+    {0x0093B644, 0x0063EF20, 0x00631DC0, 0x01B650AC},  // LocomotionCycle
+    {0x0093B634, 0x0063EF60, 0x00631DE0, 0x01B650C0},  // LocomotionEvent
+    {0x0093B620, 0x0063EFB0, 0x00631E10, 0x01B650B0},  // LocomotionLiquid
+    {0x0093B60C, 0x0063EFF0, 0x00631E30, 0x01B650B4},  // LocomotionRetard
+    {0x0093B5FC, 0x0063F030, 0x00631E50, 0x01B650A8},  // LocomotionSlide
+    {0x0093B5EC, 0x0063F070, 0x00631E70, 0x01B650A4},  // LocomotionJump
+    {0x0093B5DC, 0x0063F0C0, 0x00631ED0, 0x01B65890},  // ManageTargets
+    {0x0093B5D4, 0x0063F100, 0x00631F10, 0x01B891F8},  // Mission
+    {0x0093B5BC, 0x0063F140, 0x00632010, 0x020C35C4},  // MissionCharTriggerTrack
+    {0x0093B5A4, 0x0063F170, 0x00632070, 0x020C35C8},  // MissionVehicleTrigger
+    {0x0093B58C, 0x0063F210, 0x00632130, 0x020C35D4},  // MissionDoorLockTrack
+    {0x0093B574, 0x0063F250, 0x006321D0, 0x020C35D0},  // MissionDoorTriggerTrack
+    {0x0093B55C, 0x0063F2B0, 0x00632290, 0x020C35CC},  // MissionButtonTrigger
+    {0x0093B550, 0x0063F310, 0x00632310, 0x020C359C},  // MissionData
+    {0x0090B794, 0x0063F370, 0x00632350, 0x01B64A60},  // MotionBlur
+    {0x0093B540, 0x0063F3D0, 0x00632390, 0x01B64A64},  // BodyMotionBlur
+    {0x0093B528, 0x0063F430, 0x006323D0, 0x01B657E8},  // MoveAwayFromStimulus
+    {0x0093B518, 0x0063F470, 0x006323F0, 0x01B65828},  // MoveObjective
+    {0x0090E554, 0x0063F4C0, 0x00632430, 0x01B657D8},  // MoveToStimulus
+    {0x0093B504, 0x0063F510, 0x00632460, 0x01B657E0},  // AddWanderObjective
+    {0x0093B4F4, 0x0063F550, 0x00632480, 0x01B657E4},  // RemoveObjective
+    {0x0090E544, 0x0063F590, 0x006324A0, 0x01B657DC},  // InvestigateArea
+    {0x0093B4D8, 0x0063F5E0, 0x006324D0, 0x01B657EC},  // MoveToCurrentPlayerPosition
+    {0x0093B4C8, 0x0063F630, 0x00632500, 0x01B65824},  // MoveToVehicle
+    {0x0093B4BC, 0x0063F670, 0x00632520, 0x01B657AC},  // MoveToPOI
+    {0x0093B4B0, 0x0063F6B0, 0x00632540, 0x01B657B0},  // ClearPOI
+    {0x0093B494, 0x0063F6F0, 0x00632560, 0x01B657B4},  // IncreasePlayerPhysicalState
+    {0x0093B478, 0x0063F730, 0x00632580, 0x01B657B8},  // DecreasePlayerPhysicalState
+    {0x0093B45C, 0x0063F770, 0x006325A0, 0x01B657BC},  // ResetPlayerPhysicalState
+    {0x0093B440, 0x0063F7D0, 0x006325C0, 0x01B657C0},  // RefreshPlayerPhysicalState
+    {0x009331D8, 0x0063F810, 0x006325E0, 0x01B65628},  // BikeSoundStateTrack
+    {0x0093B434, 0x0064A9F0, 0x0063F8D0, 0x01B64A4C},  // Opportunity
+    {0x0093B420, 0x0064AA40, 0x0063F900, 0x01B64A50},  // OpportunityStruggle
+    {0x0093B408, 0x0064AA90, 0x0063F930, 0x01B64A54},  // OpportunityElseAction
+    {0x0093B3F0, 0x0064AAE0, 0x0063F960, 0x01B64A58},  // OpportunityRandomLatch
+    {0x0093B3D8, 0x0063F990, 0x00632630, 0x01B650C8},  // AllowSwitchGoofyFoot
+    {0x0093B3C8, 0x0063F9C0, 0x00632650, 0x01B650CC},  // OrientOffSet
+    {0x0093B3C0, 0x0064AB30, 0x0063FA10, 0x01B64A44},  // Play
+    {0x0093B3B0, 0x0064AB80, 0x0063FA40, 0x01B64A48},  // PlayOnTarget
+    {0x0093B398, 0x0063FA70, 0x00632680, 0x01B650F4},  // TargetGrappleRelease
+    {0x0093B390, 0x0063FAB0, 0x006326C0, 0x01B65B04},  // Pedal
+    {0x0093B388, 0x0063FAF0, 0x00632700, 0x01B65B08},  // Steer
+    {0x0093B380, 0x0063FB30, 0x00632740, 0x01B65B0C},  // Coast
+    {0x0092BAF4, 0x0063FB70, 0x00632780, 0x01B65B10},  // SpeedUp
+    {0x0090A848, 0x0063FBB0, 0x006327C0, 0x01B65B14},  // Sprint
+    {0x0091CDA4, 0x0063FBF0, 0x00632800, 0x01B65B18},  // Brake
+    {0x0093B370, 0x0063FC30, 0x00632840, 0x01B65B1C},  // SetDesiredSpeed
+    {0x0093B36C, 0x0063FC70, 0x00632880, 0x01B65B20},  // Hop
+    {0x0093956C, 0x0063FCB0, 0x006328A0, 0x01B6566C},  // Print
+    {0x0093B35C, 0x0064ABD0, 0x0063FD30, 0x01B6588C},  // ProjectileCover
+    {0x0093B34C, 0x0063FD80, 0x00632900, 0x01B651A8},  // PurchaseItem
+    {0x0093B340, 0x0063FDC0, 0x00632920, 0x01B65838},  // PursuitLoco
+    {0x0093B338, 0x0063FE10, 0x00632950, 0x01B65814},  // Race
+    {0x0093B328, 0x0063FE50, 0x006329E0, 0x01B651B8},  // RandomDiceRoll
+    {0x0093B314, 0x0063FE80, 0x00632A30, 0x01B6587C},  // RangedWeaponFire
+    {0x0090E580, 0x0063FEC0, 0x00632A80, 0x01B65880},  // PassBall
+    {0x0093B300, 0x0063FF00, 0x00632AD0, 0x01B65858},  // ReleaseFightToken
+    {0x0093B2F4, 0x0064AC40, 0x0063FF50, 0x01B65784},  // RideAround
+    {0x0093B2E4, 0x0063FF70, 0x00632AF0, 0x01B6574C},  // ScriptedAmbient
+    {0x0093B2D0, 0x0063FFB0, 0x00632B10, 0x01B6573C},  // SeekEntityPosition
+    {0x0093B2C4, 0x0064AC80, 0x00640070, 0x01B64A30},  // Sequence
+    {0x0093B2B8, 0x006400A0, 0x00632B80, 0x01B65870},  // SetTarget
+    {0x0093B2AC, 0x006400E0, 0x00632BD0, 0x01B65894},  // SetHealth
+    {0x0093B2A0, 0x00640120, 0x00632C20, 0x01B65898},  // ChaseLoco
+    {0x0093B290, 0x00640160, 0x00632C70, 0x01B65878},  // SetStationary
+    {0x0093B288, 0x006401A0, 0x00632C90, 0x01B657C4},  // SitDown
+    {0x0093958C, 0x006401E0, 0x00632CB0, 0x01B6513C},  // SetPedFlags
+    {0x0093B278, 0x00640220, 0x00632CD0, 0x01B650F8},  // SetEntityFlags
+    {0x0093B260, 0x00640260, 0x00632D20, 0x01B650FC},  // SetVehicleEntityFlags
+    {0x0093B254, 0x006402A0, 0x00632D40, 0x01B650E8},  // PedReset
+    {0x0093B24C, 0x006402E0, 0x00632D60, 0x01B655AC},  // SoundFX
+    {0x0093B23C, 0x00640320, 0x00632D90, 0x01B655B0},  // SoundFXRecycle
+    {0x0093B22C, 0x00640370, 0x00632DE0, 0x01B655B4},  // DialogSoundFX
+    {0x0093B218, 0x006403C0, 0x00632E10, 0x01B655C0},  // SoundFXParametric
+    {0x0093B20C, 0x00640410, 0x00632E70, 0x01B655C4},  // SoundFX2D
+    {0x0093B200, 0x00640450, 0x00632EA0, 0x01B655B8},  // SoundLoop
+    {0x0093B1F0, 0x00640490, 0x00632F00, 0x01B655C8},  // EmitterEnable
+    {0x0093B1DC, 0x006404D0, 0x00632F30, 0x01B655A8},  // SoundTimedBankLoad
+    {0x0093319C, 0x00640510, 0x00632F60, 0x01B655CC},  // SpeechTrack
+    {0x0093B1D0, 0x00640550, 0x00632F90, 0x01B655A0},  // SoundStream
+    {0x00929B78, 0x00640590, 0x00632FF0, 0x01B6559C},  // SoundPreloadStream
+    {0x0093B1BC, 0x006405D0, 0x00633020, 0x01B655A4},  // SoundStreamFadeout
+    {0x0093B1A4, 0x00640610, 0x00633040, 0x01B65598},  // SoundPlayPreloadStream
+    {0x0093B194, 0x00640650, 0x00633060, 0x01B65590},  // SoundAmbienceOn
+    {0x0093B180, 0x00640690, 0x00633080, 0x01B65594},  // SoundAmbienceOff
+    {0x00932FD0, 0x006406D0, 0x006330A0, 0x01B65580},  // SoundClearSpeechFilterTrack
+    {0x00932FEC, 0x00640710, 0x006330C0, 0x01B65584},  // SoundSetSpeechPriorityFilterTrack
+    {0x00933010, 0x00640750, 0x006330E0, 0x01B65588},  // SoundAddSpeechPriorityFilterTrack
+    {0x00933034, 0x00640790, 0x00633100, 0x01B6558C},  // SoundRemoveSpeechPriorityFilterTrack
+    {0x0093B16C, 0x006407D0, 0x00633120, 0x01B65100},  // StruggleButtonOn
+    {0x0093B158, 0x00640810, 0x00633150, 0x01B65104},  // StruggleButtonOff
+    {0x0093B144, 0x00640850, 0x00633170, 0x01B65108},  // SetPunishmentPoints
+    {0x0093B134, 0x00640890, 0x00633190, 0x01B6510C},  // HUDScreenFade
+    {0x0093B124, 0x006408D0, 0x006331B0, 0x01B6562C},  // SoundCrowdCheer
+    {0x0093B114, 0x00640910, 0x006331D0, 0x01B65630},  // SoundCrowdBoo
+    {0x0093B0FC, 0x00640950, 0x006331F0, 0x01B65634},  // SoundCrowdAddExcitement
+    {0x0093B0E8, 0x00640990, 0x00633210, 0x01B65638},  // SoundCrowdAddRelax
+    {0x0093B0D0, 0x006409D0, 0x00633230, 0x01B65110},  // HudComponentVisibility
+    {0x0093B0B8, 0x00640A10, 0x00633250, 0x01B65114},  // HudComponentFlashing
+    {0x0093B0A8, 0x00640A50, 0x00633270, 0x01B65118},  // HUDFlashBlip
+    {0x0093B098, 0x00640A90, 0x00633290, 0x01B65124},  // WeaponWheelOff
+    {0x0093B088, 0x00640AD0, 0x006332B0, 0x01B6511C},  // HudFlashMoney
+    {0x0093B078, 0x00640B10, 0x006332D0, 0x01B65120},  // HUDSetTagShape
+    {0x0093B068, 0x00640B50, 0x006332F0, 0x01B65128},  // ForceFeedback
+    {0x0093B05C, 0x00640B90, 0x00633310, 0x01B6512C},  // RadarBlip
+    {0x0093B048, 0x00640BE0, 0x00633340, 0x01B65130},  // AttributesForCash
+    {0x0093B03C, 0x00640C20, 0x00633360, 0x01B65134},  // AddMoney
+    {0x0093B030, 0x00640C60, 0x00633380, 0x01B65138},  // HoldState
+    {0x0093B028, 0x0064ACD0, 0x00640D20, 0x01B64A40},  // Spawn
+    {0x0093B010, 0x00640D30, 0x006333D0, 0x01B65158},  // SpecialIncrementCharge
+    {0x00931D10, 0x00640D70, 0x00633420, 0x01B6515C},  // SpecialIncreaseTrack
+    {0x0093AFF8, 0x00640DB0, 0x00633470, 0x01B65160},  // SprintIncrementCharge
+    {0x00931D44, 0x00640DF0, 0x006334C0, 0x01B65164},  // SprintIncreaseTrack
+    {0x00931D58, 0x00640E30, 0x00633510, 0x01B65168},  // SpecialPointsAddTrack
+    {0x00931D70, 0x00640E70, 0x00633560, 0x01B6516C},  // ComboCounterAddTrack
+    {0x00931D88, 0x00640EB0, 0x006335B0, 0x01B65170},  // ComboCounterSetTrack
+    {0x00931DA0, 0x00640EF0, 0x00633600, 0x01B65174},  // TransferComboToSpecialTrack
+    {0x0093AFF0, 0x0064AD10, 0x00640F30, 0x01B650DC},  // Sync
+    {0x0093AFE0, 0x00640F60, 0x00633620, 0x01B650EC},  // WorldAnchorSet
+    {0x00939228, 0x00640FA0, 0x00633670, 0x01B650F0},  // AttemptAnchorToVehicle
+    {0x0093AFD0, 0x00640FD0, 0x006336B0, 0x01B6514C},  // DamageTarget
+    {0x0092E23C, 0x00641010, 0x006336D0, 0x01B650D0},  // Target
+    {0x0093AFC4, 0x00641050, 0x00633710, 0x01B650D8},  // TargetSync
+    {0x0093AFBC, 0x006410A0, 0x00633740, 0x01B65820},  // Teacher
+    {0x0093AFA8, 0x006410E0, 0x00633790, 0x01B65AF4},  // VehicleAnimation
+    {0x0093AF9C, 0x00641130, 0x006337F0, 0x01B65B2C},  // PickUpBike
+    {0x0093AF80, 0x00641170, 0x00633810, 0x01B65094},  // VehicleAnimationParametric
+    {0x0090E614, 0x006411C0, 0x00633860, 0x01B65780},  // Wander
+    {0x0093AF74, 0x00641200, 0x00633880, 0x01B65764},  // WarnTarget
+    {0x0093AF68, 0x00641240, 0x006338A0, 0x01B65768},  // WarnTarget2
+    {0x0093AF54, 0x00641280, 0x006338E0, 0x01B65CD8},  // PropSetInTransition
+    {0x0093AF44, 0x006412C0, 0x00633930, 0x01B65A28},  // PropAnimation
+    {0x0093AF2C, 0x00641320, 0x006339A0, 0x01B65A2C},  // PropAnimationParametric
+    {0x0093AF1C, 0x00641380, 0x00633A00, 0x01B65AB0},  // PropTagEffect
+    {0x0093AF10, 0x006413C0, 0x00633A90, 0x01B65A50},  // PropTagged
+    {0x0093AEFC, 0x00641410, 0x00633AF0, 0x01B65AAC},  // PropTagCompleted
+    {0x0093AEF0, 0x00641440, 0x00633B30, 0x01B65A30},  // PropEffect
+    {0x0093AEE0, 0x00641490, 0x00633B90, 0x01B65A34},  // PropWeaponFire
+    {0x0093AED0, 0x006414E0, 0x00633BF0, 0x01B65A38},  // PropInteract
+    {0x00914090, 0x00641520, 0x00633C30, 0x01B65AB4},  // PropFlags
+    {0x0093AEC4, 0x0064AD60, 0x00641580, 0x01B65A3C},  // PlayOnProp
+    {0x0093AEB0, 0x0064ADB0, 0x006415D0, 0x01B65A40},  // PropSetPedAction
+    {0x0093AEA0, 0x0064AE00, 0x00641620, 0x01B65A44},  // PropGeometry
+    {0x0093AE88, 0x00641660, 0x00633C70, 0x01B65A48},  // PropEntityFlagsTrack
+    {0x0093AE78, 0x006416A0, 0x00633CB0, 0x01B65AB8},  // PropRotateProxy
+    {0x0093AE68, 0x0064AE60, 0x00641700, 0x01B65A4C},  // PropCollision
+    {0x0093AE5C, 0x00641730, 0x00633CD0, 0x01B651C0},  // GameTimer
+    {0x0093AE4C, 0x00641770, 0x00633D00, 0x01B651B4},  // CameraFreeze
+    {0x0093AE40, 0x006417B0, 0x00633D50, 0x01B6589C},  // GuardLoco
+    {0x0093AE2C, 0x006417F0, 0x00633DA0, 0x01B658A0},  // KeepDistanceLoco
+    {0x0093AE20, 0x00641830, 0x00633DF0, 0x01B658A4},  // TetherLoco
+    {0x0093AE0C, 0x00641880, 0x00633E30, 0x01B65798},  // GenerateDynamicPOI
+    {0x0093ADFC, 0x006418C0, 0x00633E50, 0x01B6579C},  // JoinDynamicPOI
+    {0x0093ADE8, 0x00641900, 0x00633EA0, 0x01B658A8},  // WaitForTargetLoco
+    {0x0093ADD8, 0x00641950, 0x00633F10, 0x01B658AC},  // ClearObjectives
+    {0x0093ADC0, 0x00641990, 0x00633F60, 0x01B658B0},  // CircleAroundTargetLoco
+    {0x0093ADB4, 0x006419D0, 0x00633FB0, 0x01B658B4},  // OnBikeDash
+    {0x0093ADA8, 0x00641A10, 0x00633FD0, 0x01B651C4},  // RailDriver
+    {0x0093AD98, 0x00641A60, 0x00634040, 0x01B658B8},  // FleeObjective
+    {0x0093AD88, 0x00641AA0, 0x00634090, 0x01B658BC},  // SeekToPickup
+    {0x0093AD78, 0x00641AE0, 0x006340E0, 0x01B658C8},  // SetActionTimer
+    {0x0093AD6C, 0x00641B20, 0x00634100, 0x01B651C8},  // SetPosRot
+    {0x0093AD58, 0x00641B60, 0x00634150, 0x01B658C0},  // PropSetUsageState
+    {0x0093AD40, 0x00641BA0, 0x006341A0, 0x01B658C4},  // PropReleaseUsageState
+    {0x0093AD2C, 0x00641BE0, 0x006341F0, 0x01B651D4},  // NotifyOnSightPlayer
+    {0x0093AD1C, 0x00641C20, 0x00634240, 0x01B651D8},  // NotifyOnHear
+    {0x0093AD08, 0x00641C60, 0x00634290, 0x01B651D0},  // SetInStealthProp
+    {0x0093ACFC, 0x00641CA0, 0x006342E0, 0x01B658CC},  // JumpLoco
+    {0x0093ACF4, 0x00641CE0, 0x00634340, 0x01B658D0},  // RatLoco
+    {0x0093ACE4, 0x00641D50, 0x006343C0, 0x01B651CC},  // ShopSetState
+    {0x0093ACD8, 0x00641D90, 0x00634410, 0x01B658D4},  // SeekToSnow
+    {0x0093ACC4, 0x00641DD0, 0x00634470, 0x01B658DC},  // PlayCatchObjective
+    {0x0093ACB0, 0x00641E10, 0x006344C0, 0x01B658E0},  // PassBallObjective
+    {0x0093AC98, 0x00641E50, 0x00634510, 0x01B658E4},  // ReceiveBallObjective
+    {0x0093AC8C, 0x00641E90, 0x00634560, 0x01B658E8},  // RecruitAlly
+    {0x0093AC80, 0x00641ED0, 0x006345B0, 0x01B658EC},  // DismissAlly
+    {0x0093AC70, 0x00641F10, 0x00634600, 0x01B658F0},  // NeverOffscreen
+    {0x0093AC64, 0x00641F50, 0x00634650, 0x01B658F4},  // Socialize
+    {0x0093AC4C, 0x00641F90, 0x006346A0, 0x01B658F8},  // SocializeActionComplete
+    {0x0093AC38, 0x00641FD0, 0x006346F0, 0x01B658FC},  // PlayerSocializing
+    {0x0093AC20, 0x00642010, 0x00634750, 0x01B65900},  // SetEmotionTowardsTarget
+    {0x0093AC08, 0x00642050, 0x006347A0, 0x01B65904},  // SetEmotionTowardsPlayer
+    {0x0093ABE8, 0x00642090, 0x006347F0, 0x01B65908},  // SetWantsToSocializeWithTarget
+    {0x0093ABD0, 0x006420D0, 0x00634810, 0x01B651E4},  // CreateGiftRewardPickup
+    {0x0093ABBC, 0x00642110, 0x00634860, 0x01B6591C},  // TargetNearestCar
+    {0x0093ABAC, 0x00642150, 0x006348B0, 0x01B65920},  // TargetPlayer
+    {0x0093AB9C, 0x00642190, 0x006348D0, 0x01B651F4},  // SetOverheadIcon
+    {0x0093AB90, 0x006421D0, 0x006348F0, 0x01B651E8},  // AcceptGift
+    {0x0093AB84, 0x00642210, 0x00634910, 0x01B651EC},  // RemoveItem
+    {0x0092A0D4, 0x0064AEB0, 0x00642250, 0x01B651F8},  // StatSetAsInt
+    {0x0092A0C4, 0x00642270, 0x00634930, 0x01B651FC},  // StatSetAsFloat
+    {0x0092A0B4, 0x006422B0, 0x00634950, 0x01B65200},  // StatAddToInt
+    {0x0092A0A4, 0x006422F0, 0x00634970, 0x01B65204},  // StatAddToFloat
+    {0x0093AB6C, 0x00642330, 0x00634990, 0x01B6575C},  // ClearCurrentStimulus
+    {0x0093AB58, 0x00642370, 0x006349E0, 0x01B65924},  // SetTargetSemaphore
+    {0x0093AB48, 0x006423B0, 0x00634A30, 0x01B65928},  // EvadeGrenade
+    {0x0093AB38, 0x00642400, 0x00634AA0, 0x01B6592C},  // EvadeProjectile
+    {0x0093AB28, 0x00642460, 0x00634B20, 0x01B65930},  // RecruitAllySelf
+    {0x0093AB18, 0x006424A0, 0x00634B70, 0x01B65934},  // DismissAllySelf
+    {0x0093AAFC, 0x006424E0, 0x00634BC0, 0x01B65844},  // ActionRegisterButtonHistory
+    {0x0093AADC, 0x00642520, 0x00634C10, 0x01B65938},  // SetMyTargetToMyLeadersTarget
+    {0x0093AAC4, 0x00642560, 0x00634C60, 0x01B6593C},  // AttackMyLeadersTarget
+    {0x0093AAB4, 0x006425A0, 0x00634CB0, 0x01B658D8},  // SeekToSurface
+    {0x0093AAA4, 0x006425E0, 0x00634D00, 0x01B65208},  // BalanceMeter
+    {0x0093AA90, 0x00642620, 0x00634D40, 0x01B65ABC},  // PropAlterObstacle
+    {0x0092A578, 0x00642660, 0x00634D80, 0x020C35D8},  // TutorialShowMessage
+    {0x0093AA78, 0x006426A0, 0x00634DD0, 0x020C35DC},  // TutorialCompleteActive
+    {0x0093AA68, 0x006426E0, 0x00634E10, 0x020C35E0},  // TutorialPause
+    {0x0092A59C, 0x00642720, 0x00634E50, 0x020C35E4},  // TutorialStart
+    {0x0093AA4C, 0x00642760, 0x00634EB0, 0x01B65940},  // PedSetConversationStance
+    {0x0093AA38, 0x006427A0, 0x00634F00, 0x01B6520C},  // CameraGetParametric
+    {0x0093AA20, 0x006427E0, 0x00634F50, 0x01B65214},  // OffsetCameraMirror180
+    {0x0093AA0C, 0x00642820, 0x00634F70, 0x01B651F0},  // SetCanAcceptGift
+    {0x0093A9F8, 0x00642860, 0x00634FC0, 0x01B65944},  // DisableMoveOutOfWay
+    {0x0093A9E4, 0x006428A0, 0x00635010, 0x01B65948},  // EquipRangedWeapon
+    {0x0093A9D8, 0x006428E0, 0x00635030, 0x01B651AC},  // CameraShot
+    {0x0093A9CC, 0x00642920, 0x00635060, 0x01B651B0},  // CameraShake
+    {0x00932748, 0x00642960, 0x006350A0, 0x01B891E0},  // Cinematic
+    {0x0093A9C0, 0x006350D0, 0x00635100, 0x01B891E4},  // DialogLine
+    {0x0093A9B0, 0x006429B0, 0x00635110, 0x01B65058},  // DialogAnimation
+    {0x0093A9A4, 0x00642A00, 0x00635170, 0x01B891EC},  // DialogShot
+    {0x0093A998, 0x00642A50, 0x006351C0, 0x01B89200},  // FacialEye
+    {0x0093A988, 0x00642A90, 0x00635200, 0x01B89204},  // FacialEyeLid
+    {0x0093A978, 0x00642AD0, 0x00635240, 0x01B89208},  // FacialEyeBrow
+    {0x0093A96C, 0x00642B10, 0x00635280, 0x01B8920C},  // FacialMouth
+    {0x0093A964, 0x0064B1C0, 0x0064AF60, 0x01B891FC},  // Menu
+    {0x0093A95C, 0x00642B50, 0x006352C0, 0x01B891F4},  // Script
+    {0x00931E94, 0x00642BA0, 0x006352F0, 0x01B651A4},  // ScreenFxDizzyTrack
+    {0x0093A950, 0x00642BE0, 0x00635330, 0x01B89214},  // CameraPath
+    {0x0093A93C, 0x00642C30, 0x00635380, 0x01B891F0},  // CameraCutscenePath
+    {0x0093A930, 0x00642C70, 0x006353D0, 0x01B89218},  // TextLine
+    {0x00919260, 0x00642CB0, 0x00635420, 0x01B8921C},  // Text
+    {0x0093A924, 0x00642CF0, 0x00635470, 0x01B89220},  // TextGood
+    {0x0093A918, 0x00642D30, 0x006354C0, 0x01B89224},  // CameraXYZ
+    {0x0093A908, 0x00642D70, 0x006354E0, 0x01B89228},  // CameraFadeSetup
+    {0x0093A8F8, 0x0064AF70, 0x00642E30, 0x01B65C6C},  // WeaponAnimation
+    {0x0093A8E8, 0x0064AFB0, 0x00642E60, 0x01B65D30},  // WeaponCollision
+    {0x0093A8DC, 0x00642EB0, 0x00635520, 0x01B65C7C},  // WeaponFire
+    {0x0093A8BC, 0x00642EF0, 0x00635580, 0x01B65C80},  // WeaponFireSpecificOrientation
+    {0x0093A8AC, 0x00642F40, 0x006355D0, 0x01B65C94},  // WeaponImpulse
+    {0x0093A898, 0x00642F80, 0x006355F0, 0x01B65C98},  // WeaponTargetImpulse
+    {0x0093A880, 0x00642FC0, 0x00635610, 0x01B65C9C},  // WeaponMinigameImpulse
+    {0x0093A86C, 0x00643000, 0x00635650, 0x01B65CA0},  // ExtinguisherFire
+    {0x0093A85C, 0x00643040, 0x00635690, 0x01B65CA4},  // PoisonSprayFire
+    {0x0093A850, 0x00643080, 0x006356D0, 0x01B65CA8},  // WeaponFX
+    {0x0093A838, 0x006430D0, 0x00635730, 0x01B65C78},  // WeaponIncrementCharge
+    {0x0093A828, 0x00643110, 0x00635780, 0x01B65C70},  // WeaponSetCharge
+    {0x0093A818, 0x00643150, 0x006357D0, 0x01B65C74},  // PropStartLife
+    {0x0093A804, 0x00643190, 0x00635810, 0x01B65C84},  // WeaponFireRotation
+    {0x0093A7F0, 0x006431D0, 0x00635850, 0x01B65C8C},  // WeaponFireOffset
+    {0x0093A7D8, 0x00643210, 0x00635890, 0x01B65C90},  // WeaponFireStartOffset
+    {0x0093A7CC, 0x00643250, 0x006358D0, 0x01B65D1C},  // AmmoChange
+    {0x0093A7BC, 0x00643290, 0x00635910, 0x01B65D08},  // SetWeaponInfo
+    {0x0093A7AC, 0x006432D0, 0x00635960, 0x01B65D18},  // AmmoAttachment
+    {0x0093A798, 0x00643320, 0x006359B0, 0x01B65CAC},  // ProjectilePickup
+    {0x0093A784, 0x00643360, 0x00635A00, 0x01B65C68},  // WeaponFireFrisbee
+    {0x0093A778, 0x006433A0, 0x00635A40, 0x01B65D24},  // TargetLock
+    {0x0093A768, 0x0064B020, 0x00643400, 0x01B65D28},  // ExecuteOnTarget
+    {0x0093A760, 0x00643430, 0x00635A80, 0x01B65D2C},  // Trace
+    {0x0093A754, 0x00643470, 0x00635AD0, 0x01B65CB0},  // PropPickup
+    {0x0093A748, 0x006434B0, 0x00635B10, 0x01B65CB4},  // PropAttach
+    {0x0093A738, 0x00643500, 0x00635B60, 0x01B65CC8},  // PropSetSocket
+    {0x0093A72C, 0x00643550, 0x00635BB0, 0x01B65CCC},  // PropDetach
+    {0x0093A71C, 0x00643590, 0x00635C00, 0x01B65CB8},  // PropAttachEx
+    {0x0093A70C, 0x006435E0, 0x00635C60, 0x01B65CD0},  // PropDetachEx
+    {0x0093A6F8, 0x00643620, 0x00635CB0, 0x01B65CBC},  // PropAttachToProp
+    {0x0093A6E0, 0x00643680, 0x00635D10, 0x01B65CC0},  // PropRemoveAttachment
+    {0x0093A6C8, 0x006436C0, 0x00635D60, 0x01B65CC4},  // PropScatterAttachment
+    {0x0093A6B8, 0x00643710, 0x00635DB0, 0x01B65CDC},  // PropGetDesired
+    {0x0093A6A8, 0x00643750, 0x00635DF0, 0x01B65CD4},  // PropSetDesired
+    {0x0093A69C, 0x00643790, 0x00635E40, 0x01B65CE0},  // PropSpawn
+    {0x0093A688, 0x006437E0, 0x00635E90, 0x01B65CFC},  // UpdateFirstPerson
+    {0x0093A674, 0x0064B070, 0x00643850, 0x01B65D04},  // RenderFirstPerson
+    {0x0093A660, 0x00643870, 0x00635EF0, 0x01B65D14},  // CameraIrisControl
+    {0x0093A654, 0x006438B0, 0x00635F40, 0x01B65CE4},  // CameraSet
+    {0x0093A648, 0x006438F0, 0x00635F90, 0x01B65CE8},  // CameraLock
+    {0x0093A630, 0x00643930, 0x00635FE0, 0x01B65CF8},  // CameraSetDesiredActive
+    {0x0093A61C, 0x00643970, 0x00636020, 0x01B65D10},  // CameraZoomControl
+    {0x0093A60C, 0x006439B0, 0x00636080, 0x01B65CF4},  // CameraSetLimit
+    {0x0090C104, 0x006439F0, 0x006360C0, 0x01B65C64},  // CameraFade
+    {0x0093A5FC, 0x00643A30, 0x00636100, 0x01B65D34},  // SetWeaponFlags
+    {0x0093A5E4, 0x00643A70, 0x00636140, 0x01B65D3C},  // WeaponSpawnDamageEffect
+    {0x0093A5C8, 0x00643AB0, 0x00636180, 0x01B65D40},  // WeaponSetNextDamageLevel
+    {0x0093A5B4, 0x00643AF0, 0x006361D0, 0x01B6590C},  // SetSocialWaitTime
+    {0x0093A5A0, 0x00643B30, 0x006361F0, 0x01B6563C},  // AISocialSpeechEvent
+    {0x0093A588, 0x00643B80, 0x00636220, 0x01B65640},  // PlayerSocialSpeechEvent
+    {0x00929808, 0x00643BD0, 0x00636280, 0x01B65644},  // SoundFadeWithCamera
+    {0x0092959C, 0x00643C10, 0x006362D0, 0x01B65648},  // MusicAllowPlayDuringCutscenes
+    {0x0093A578, 0x00643C50, 0x00636320, 0x01B65910},  // StopSocializing
+    {0x0093A568, 0x00643C90, 0x00636370, 0x01B65914},  // IncKissCount
+    {0x0093A558, 0x00643CC0, 0x006363C0, 0x01B65918},  // GiveArmorBonus
+    {0x009259EC, 0x00643D00, 0x00636410, 0x01B65218},  // GiveItemToPlayer
+    {0x0093A544, 0x00643D40, 0x00636470, 0x01B6521C},  // BeamMoveToSafePos
+    {0x0093A52C, 0x00643DA0, 0x006364E0, 0x01B65220},  // BeamOrientToSafeHeading
+    {0x0093A514, 0x00643DE0, 0x00636530, 0x01B6594C},  // ClearCurrentObjective
+    {0x0093A504, 0x00643E20, 0x00636570, 0x01B65C88},  // WeaponFireAmmo
+    {0x0093A4F8, 0x00643E60, 0x006365C0, 0x01B65D38},  // WeaponScale
+    {0x0093A4EC, 0x00643EA0, 0x006365E0, 0x01B65AC0},  // PropUseText
+    {0x0093A4D8, 0x00643EE0, 0x00636630, 0x01B8922C},  // CameraLookatPlayer
+    {0x0093A4C4, 0x00643F20, 0x00636670, 0x01B65AC4},  // PropSetTargetSocket
+    {0x0093A4B0, 0x00643F60, 0x006366A0, 0x01B650D4},  // TargetOverrideReset
+    {0x0093A494, 0x00643FA0, 0x006366C0, 0x01B65950},  // TargetAttackRightsAcquire
+    {0x0093A478, 0x00643FE0, 0x006366E0, 0x01B65954},  // TargetAttackRightsRelease
+    {0x0093A464, 0x00644020, 0x00636700, 0x01B65958},  // TandemHelperClear
+    {0x0093A44C, 0x00644050, 0x00636750, 0x01B651DC},  // NotifyOnMissionCritical
+    {0x0093A440, 0x00644090, 0x006367A0, 0x01B651E0},  // EndMission
+    {0x0093A428, 0x006440D0, 0x006367C0, 0x01B6509C},  // AnimationDriverRotation
+    {0x0093A410, 0x00644110, 0x00636810, 0x01B65210},  // HeadtrackGetParametric
+    {0x0093A3F8, 0x00644150, 0x00636860, 0x01B6595C},  // ClearLastVehicleUsed
+    {0x0093A3E4, 0x00644190, 0x006368B0, 0x01B65CF0},  // CameraSetSafeZone
+    {0x0093A3C8, 0x006441D0, 0x00636900, 0x01B65CEC},  // CameraSetStartPointPullback
+    {0x0093A3B0, 0x00644210, 0x00636920, 0x01B65624},  // RemoveAllQueuedSpeech
+    {0x0093A39C, 0x00644250, 0x00636940, 0x01B65068},  // DialogJointDriver
+    {0x0093A384, 0x006442C0, 0x006369B0, 0x01B6584C},  // DialogActionNodeRequest
+    {0x009342CC, 0x00644310, 0x00636A10, 0x01B65960},  // TetherToTarget
+    {0x009342DC, 0x00644350, 0x00636A60, 0x01B65964},  // TetherClear
+    {0x0093A36C, 0x00644380, 0x00636AA0, 0x01B65180},  // DialogAttachedEffect
+    {0x0093A35C, 0x006443D0, 0x00636B00, 0x01B65190},  // DialogFxDecal
+    {0x0093A34C, 0x00644420, 0x00636B40, 0x01B65968},  // SetAllyState
+    {0x0093A33C, 0x00644460, 0x00636B60, 0x01B6596C},  // SetAllyMorale
+    {0x0093A328, 0x006444A0, 0x00636BB0, 0x01B65224},  // SetMotionIntention
+    {0x0093A310, 0x006444E0, 0x00636BD0, 0x01B655BC},  // CleanupDeadSoundLoops
+    {0x0093A304, 0x00644520, 0x00636C20, 0x01B65228},  // TargetClear
+    {0x0093A2E8, 0x00644560, 0x00636C60, 0x01B65AC8},  // PropAttemptDoorTransition
+    {0x00932178, 0x006445A0, 0x00636CB0, 0x01B6522C},  // SaveGameTrack
+    {0x009331A8, 0x006445E0, 0x00636CD0, 0x01B65620},  // SpeechStartTrack
+    {0x00932304, 0x00644620, 0x00636D20, 0x01B65230},  // SpineControl
+    {0x0093A2D4, 0x00644660, 0x00636D80, 0x01B65234},  // SpineControlDisable
+    {0x0093A2BC, 0x006446A0, 0x00636DD0, 0x01B65238},  // SpineControlSetTarget
+    {0x0093A2A4, 0x006446E0, 0x00636E10, 0x01B65D0C},  // SelectBestDirTossTarget
+    {0x0093A28C, 0x00644720, 0x00636E50, 0x01B65ACC},  // PropAttachPropAnimation
+    {0x0093A270, 0x00644790, 0x00636EC0, 0x01B65AD0},  // PropAnimAttachToPropAnim
+    {0x0093A254, 0x006447E0, 0x00636F20, 0x01B65AD4},  // PropAnimRemoveAttachment
+    {0x0093A23C, 0x00644820, 0x00636F70, 0x01B65AD8},  // PropTransferOwnership
+    {0x0093A22C, 0x00644860, 0x00636FC0, 0x01B65970},  // RewardPlayer
+    {0x0093A218, 0x006448A0, 0x00637010, 0x01B65974},  // GivePlayerReward
+    {0x0093A210, 0x006448D0, 0x00637030, 0x01B65978},  // AddBlip
+    {0x0093A204, 0x00644910, 0x00637050, 0x01B6597C},  // ClearBlip
+    {0x0093A1F0, 0x00644950, 0x006370A0, 0x01B65980},  // SlingerObjective
+    {0x0093A1D0, 0x00644990, 0x006370E0, 0x01B65D20},  // WeaponRemoveCollisionProjectile
+    {0x0093A1BC, 0x006449D0, 0x00637140, 0x01B6523C},  // CompletionDisplay
+    {0x0093A19C, 0x00644A20, 0x00637170, 0x01B65778},  // GivePunishmentPointsToPlayer
+    {0x0093A180, 0x00644A60, 0x006371C0, 0x01B65D44},  // WeaponPlayerFireAutoTarget
+    {0x0093A168, 0x00644AA0, 0x00637210, 0x01B65240},  // usePelvisForHealthMeter
+    {0x0093A154, 0x00644AE0, 0x00637230, 0x01B6524C},  // AttackTimerReset
+    {0x0093A138, 0x00644B20, 0x00637250, 0x01B6576C},  // PunishableTargetThreatened
+    {0x0093A124, 0x00644B60, 0x006372A0, 0x01B891E8},  // CancelConversation
+    {0x00925A88, 0x00644BA0, 0x006372C0, 0x01B65984},  // RegisterAsGirlfriend
+    {0x0093A108, 0x00644BE0, 0x006372E0, 0x01B65988},  // DeteriorateAttitudeToTarget
+    {0x0093A0EC, 0x00644C20, 0x00637300, 0x01B6598C},  // SetTargetAsGrappleTarget
+    {0x0093A0D8, 0x00644C70, 0x00637360, 0x01B65ADC},  // PropSaveLockerState
+    {0x0093A0CC, 0x00644CA0, 0x006373B0, 0x01B65990},  // ChangeDay
+};
+static_assert(sizeof(kTrackRows) / sizeof(kTrackRows[0]) == 0x1BE);
+
+const TrackRow kButesRows[] = {
+    {0x009325CC, 0x0064A6E0, 0x0063C8C0, 0x020C893C},  // FightCamButes
+    {0x0093A0BC, 0x0063C8E0, 0x0062FE30, 0x020C8940},  // CoasterCamButes
+    {0x009324A8, 0x0063C920, 0x0062FE50, 0x020C8944},  // VehicleCamButes
+    {0x00932694, 0x0063C960, 0x0062FE70, 0x020C8948},  // FollowCam3Butes
+    {0x0093A0A8, 0x0063C9A0, 0x0062FEB0, 0x020C894C},  // DodgeballCamButes
+    {0x009326B4, 0x0063C9E0, 0x0062FEF0, 0x020C8950},  // DodgeballPhysicsButes
+    {0x009326F8, 0x0063CA20, 0x0062FF30, 0x020C8954},  // DodgeballAIButes
+    {0x009326E0, 0x0063CA60, 0x0062FF70, 0x020C8958},  // DodgeballAIRampButes
+    {0x0093A094, 0x0063CAA0, 0x0062FFB0, 0x020C895C},  // DodgeballGameButes
+    {0x009328B4, 0x0063CAE0, 0x0062FFF0, 0x020C8960},  // AIButes
+    {0x009328E8, 0x0063CB20, 0x00630030, 0x020C8964},  // FightCollisionButes
+    {0x0093A080, 0x0063CB60, 0x00630070, 0x020C8968},  // ButtonTriggerButes
+    {0x009325FC, 0x0063CBA0, 0x006300B0, 0x020C896C},  // TimePeriodButes
+    {0x0093A070, 0x0063CBF0, 0x00630110, 0x020C8970},  // TimeCycleButes
+    {0x0093A05C, 0x0063CC50, 0x00630170, 0x020C8974},  // DodgeballArenaButes
+    {0x0093A048, 0x0063CCA0, 0x006301D0, 0x020C8978},  // DebugPlayerButes
+    {0x0093A03C, 0x0063CCE0, 0x00630210, 0x020C897C},  // PlayerButes
+    {0x0093A02C, 0x0063CD50, 0x00630280, 0x020C8980},  // FrisbeeButes
+    {0x009322B8, 0x0063CD90, 0x006302C0, 0x020C8984},  // FirstPersonCamButes
+    {0x00932588, 0x0063CDD0, 0x00630300, 0x020C8988},  // OffsetCamButes
+    {0x0093263C, 0x0063CE30, 0x00630410, 0x020C898C},  // ProjectileButes
+    {0x00932718, 0x0063CE70, 0x00630440, 0x020C8990},  // CrosshairButes
+    {0x0093A01C, 0x0063CEB0, 0x00630490, 0x020C8994},  // ActionMapButes
+    {0x00932954, 0x0063CEF0, 0x006304B0, 0x020C8998},  // PickupButes
+    {0x009328DC, 0x0063CF30, 0x00630590, 0x020C899C},  // ObjectButes
+    {0x0093A00C, 0x0063CF70, 0x006305C0, 0x020C89A0},  // CinematicButes
+    {0x0093A000, 0x0063CFB0, 0x00630600, 0x020C89A4},  // MenuButes
+    {0x0093276C, 0x0063CFF0, 0x00630620, 0x020C89A8},  // CinematicShotButes
+    {0x00932754, 0x0063D030, 0x006306D0, 0x020C89AC},  // CinematicShotGroupButes
+    {0x009324B8, 0x0063D060, 0x00630700, 0x020C89B0},  // StimulusButes
+    {0x00932920, 0x0063D0A0, 0x00630740, 0x020C89B4},  // PunishmentButes
+    {0x00932628, 0x0063D0E0, 0x00630820, 0x020C89B8},  // PropButes
+    {0x00932618, 0x0063D120, 0x00630850, 0x020C89BC},  // PropExtraButes
+    {0x00932658, 0x0063D160, 0x006308E0, 0x020C89C0},  // PickupListButes
+    {0x00939FF4, 0x0063D190, 0x00630910, 0x020C89C4},  // BikeButes
+    {0x00939FE8, 0x0063D1D0, 0x00630950, 0x020C89C8},  // PhotoButes
+    {0x00939FD8, 0x0063D210, 0x00630990, 0x020C89CC},  // TaggingButes
+    {0x00939FC0, 0x0063D250, 0x006309D0, 0x020C89D0},  // SurfaceSoundRangeButes
+    {0x00939FAC, 0x0063D290, 0x00630A10, 0x020C89D4},  // AreaTransitionButes
+    {0x00939F9C, 0x0063D2D0, 0x00630A50, 0x020C89D8},  // TrafficButes
+    {0x00939F84, 0x0063D310, 0x00630A90, 0x020C89DC},  // PlayerAwarenessButes
+    {0x00939F74, 0x0063D350, 0x00630AD0, 0x020C89E0},  // StoreCamButes
+    {0x00939F64, 0x0063D390, 0x00630B10, 0x020C89E4},  // SoccerPButes
+    {0x00939F58, 0x0063D3D0, 0x00630B50, 0x020C89E8},  // RadarButes
+    {0x00939F44, 0x0063D410, 0x00630B90, 0x020C89EC},  // ArmWrestlingButes
+    {0x00939F34, 0x0063D450, 0x00630BD0, 0x020C89F0},  // MiscGameButes
+    {0x00932560, 0x0063D490, 0x00630C10, 0x020C89F4},  // ArcadeRaceCameraButes
+    {0x00939F1C, 0x0063D4D0, 0x00630C50, 0x020C89F8},  // GlobalSpineControlButes
+    {0x009322EC, 0x0063D510, 0x00630C90, 0x020C89FC},  // SpineControlWeightButes
+};
+static_assert(sizeof(kButesRows) / sizeof(kButesRows[0]) == 0x31);
+
+// each row: an entry (the name's key, New, CreateAt) added to the registry, and the
+// name's key set in its global too
+template <size_t N>
+void AddRows(void* registry, const TrackRow (&rows)[N]) {
+    for (const TrackRow& row : rows) {
+        uint32_t* entry = static_cast<uint32_t*>(Malloc(0xC));
+        if (entry) {
+            NameKey_Default(entry);
+        }
+        // (a failed allocation is written at null, as the game does)
+        const char* name = reinterpret_cast<const char*>(uintptr_t(row.name));
+        NameKey_FromString(entry, name);
+        At<uint32_t>(reinterpret_cast<uint8_t*>(entry), 8) = row.createAt;
+        At<uint32_t>(reinterpret_cast<uint8_t*>(entry), 4) = row.make;
+        NameKey_FromString(reinterpret_cast<uint32_t*>(uintptr_t(row.key)), name);
+        Registry_Add(registry, entry);
+    }
+}
+
+// 0x64FA20 (cdecl, the registry): the Butes objects registered (no reserve: after the
+// tracks)
+void __cdecl RegisterButesImpl(void* registry) {
+    AddRows(registry, kButesRows);
+}
+
+// 0x6502B0 (cdecl): room reserved, every track registered, then the Butes objects
+void __cdecl RegisterAllTracks() {
+    Registry_Reserve(trackRegistry);
+    AddRows(trackRegistry, kTrackRows);
+    RegisterButes(trackRegistry);
+}
+
+} // namespace
+
+#define TRKINIT_REVERSED(name, address, fn)     REVERSED(name, address, RE_BODY(fn), nullptr, nullptr, re::Mode::Original)
+
+TRKINIT_REVERSED("ActionTracks::RegisterButes", 0x0064FA20, &RegisterButesImpl);
+TRKINIT_REVERSED("ActionTracks::RegisterAll", 0x006502B0, &RegisterAllTracks);

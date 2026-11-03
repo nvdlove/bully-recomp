@@ -1,0 +1,714 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --titlebar: #1e1f22; --sidebar: #2b2d31; --content: #313338; --card: #2b2d31; --card-hi: #35373c;
+    --input: #1e1f22; --line: #3f4147; --text: #dbdee1; --text-hi: #f2f3f5; --muted: #949ba4; --faint: #6d6f78;
+    --accent: #5865f2; --accent-hi: #4752c4; --green: #23a55a; --red: #f23f43; --yellow: #f0b232;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--content); color: var(--text);
+    font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+  ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: #1a1b1e; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* title bar */
+  #titlebar { height: 34px; background: var(--titlebar); display: flex; align-items: center; }
+  #drag { flex: 1; height: 100%; display: flex; align-items: center; gap: 9px; padding-left: 12px; }
+  #title { font-size: 12.5px; font-weight: 600; color: var(--muted); letter-spacing: .3px; }
+  .tb { width: 44px; height: 34px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+  .tb:hover { background: #2e3035; color: var(--text-hi); }
+  .tb.close:hover { background: var(--red); color: #fff; }
+  .tb svg { width: 12px; height: 12px; }
+
+  /* layout */
+  #app { display: flex; height: calc(100% - 34px); }
+  nav { width: 208px; background: var(--sidebar); display: flex; flex-direction: column; padding: 14px 8px; }
+  nav h6 { margin: 4px 10px 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .6px; color: var(--muted); text-transform: uppercase; }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: var(--muted);
+    cursor: pointer; font-weight: 500; margin-bottom: 2px; }
+  .navitem svg { width: 18px; height: 18px; flex: none; opacity: .9; }
+  .navitem:hover { background: #35373c; color: var(--text); }
+  .navitem.active { background: #404249; color: var(--text-hi); }
+  #gamecard { margin-top: auto; background: #232428; border-radius: var(--radius); padding: 10px 12px; }
+  #gamecard .row1 { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-hi); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.on { background: var(--green); box-shadow: 0 0 0 3px rgba(35,165,90,.18); }
+  #gamecard .sub { color: var(--muted); font-size: 12px; margin-top: 3px; word-break: break-word; }
+
+  main { flex: 1; overflow-y: auto; padding: 22px 26px 26px; }
+  .page { display: none; } .page.active { display: block; animation: fade .14s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; } }
+  h1 { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: var(--text-hi); }
+  .lede { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .5px; color: var(--muted); text-transform: uppercase; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+  .row + .row { border-top: 1px solid #36383d; }
+  .row .label { flex: 1; } .row .label b { display: block; font-weight: 500; color: var(--text-hi); }
+  .row .label span { display: block; font-size: 12px; color: var(--muted); }
+
+  /* switch */
+  .switch { position: relative; width: 40px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch i { position: absolute; inset: 0; border-radius: 12px; background: #80848e; transition: .15s; cursor: pointer; }
+  .switch i::after { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%; background: #fff; transition: .15s; }
+  .switch input:checked + i { background: var(--green); }
+  .switch input:checked + i::after { transform: translateX(16px); }
+
+  /* inputs */
+  input[type=number], input[type=text], select { background: var(--input); color: var(--text-hi); border: 0; border-radius: 4px;
+    padding: 7px 9px; font: inherit; outline: none; }
+  input[type=number] { width: 78px; } input:focus, select:focus { box-shadow: 0 0 0 2px var(--accent); }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 6px; border-radius: 3px; background: #4e5058; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.4); cursor: pointer; }
+  input[type=range]:disabled { opacity: .4; }
+  input[type=color] { width: 36px; height: 28px; padding: 0; border: 0; border-radius: 4px; background: none; cursor: pointer; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } input[type=color]::-webkit-color-swatch { border: 0; border-radius: 4px; }
+  .val { min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-hi); font-weight: 600; font-size: 13px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 4px 10px; border-radius: 12px; background: #3a3c42; color: var(--text); font-size: 12px; cursor: pointer; }
+  .chip:hover { background: #474a51; } .chip.on { background: var(--accent); color: #fff; }
+  .seg { display: inline-flex; background: var(--input); border-radius: 6px; padding: 3px; gap: 2px; }
+  .seg span { padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 13px; }
+  .seg span.on { background: #4e5058; color: var(--text-hi); }
+  .btn { border: 0; border-radius: 4px; padding: 8px 16px; font: 600 13.5px "Segoe UI", sans-serif; cursor: pointer; color: #fff; background: #4e5058; }
+  .btn:hover { background: #6d6f78; } .btn.primary { background: var(--accent); } .btn.primary:hover { background: var(--accent-hi); }
+  .btn.danger { background: transparent; color: var(--red); } .btn.danger:hover { background: rgba(242,63,67,.1); }
+  .btn:disabled { background: #3a3c42; color: var(--faint); cursor: default; }
+  .btn.wide { width: 100%; padding: 11px; font-size: 14.5px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .error { color: var(--red); font-size: 12.5px; margin-top: 8px; word-break: break-word; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .stat { background: var(--card); border-radius: var(--radius); padding: 14px 16px; }
+  .stat small { color: var(--muted); font-size: 11.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+  .stat div { font-size: 30px; font-weight: 700; color: var(--text-hi); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .stat div em { font-style: normal; font-size: 14px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .grid2 .row { border-top: 0 !important; }
+  .disabled-block { opacity: .45; pointer-events: none; }
+  .presetbar { display: flex; gap: 8px; align-items: center; }
+  .presetbar select { flex: 1; }
+
+  /* live data */
+  .hero { position: relative; overflow: hidden; border-radius: 12px; padding: 18px 20px 16px; margin-bottom: 12px;
+    background: radial-gradient(120% 140% at 0% 0%, #3a2a6b 0%, #23213a 45%, #1c1d24 100%); border: 1px solid #3b3558; }
+  .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); }
+  .hero h1 { display: flex; align-items: center; gap: 10px; margin: 0 0 2px; font-size: 22px; letter-spacing: .5px; }
+  .live-pill { font-size: 11px; font-weight: 800; letter-spacing: 1px; padding: 3px 8px; border-radius: 999px; background: rgba(242,63,67,.16); color: #ff6b6e; }
+  .live-pill.off { background: #3a3c42; color: var(--muted); }
+  .live-pill i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; animation: pulse 1.2s ease-in-out infinite; }
+  .live-pill.off i { animation: none; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .hero p { margin: 0 0 14px; color: #b5b2d1; font-size: 12.5px; }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .tile { background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.06); border-radius: 8px; padding: 9px 10px; }
+  .tile b { display: block; font-size: 19px; color: #fff; font-variant-numeric: tabular-nums; }
+  .tile span { font-size: 10.5px; color: #a7a4c4; text-transform: uppercase; letter-spacing: .5px; font-weight: 700; }
+  .cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .cards2 .card { margin: 0; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; color: var(--text-hi); font-variant-numeric: tabular-nums; text-align: right; }
+  .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  .bar { height: 6px; border-radius: 3px; background: #1e1f22; overflow: hidden; margin-top: 3px; }
+  .bar > i { display: block; height: 100%; background: var(--green); transition: width .3s; }
+  .bigclock { font-size: 34px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+  .plist { font-size: 12.5px; }
+  .plist div { display: grid; grid-template-columns: 52px 1fr 56px 62px; gap: 8px; padding: 4px 0; border-top: 1px solid #36383d; align-items: center; }
+  .plist div:first-child { border-top: 0; }
+  .plist em { font-style: normal; color: var(--muted); }
+  .explorer .bar2 { display: flex; gap: 8px; margin-bottom: 8px; }
+  .explorer .bar2 input { flex: 1; }
+  .explorer select { max-width: 220px; }
+  table.dt { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  table.dt th { text-align: left; color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  table.dt td { padding: 4px 6px; border-bottom: 1px solid #34363b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+  table.dt td.v { color: #fff; font-family: "Cascadia Mono", Consolas, monospace; transition: background .6s; }
+  table.dt td.v.flash { background: rgba(88,101,242,.35); transition: none; }
+  table.dt td.n { color: var(--muted); }
+  table.dt tr:hover td { background: #35373c; }
+  .pager { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="titlebar">
+  <div id="drag"><div id="title">BULLY MENU</div></div>
+  <button class="tb" id="min" title="Minimize"><svg viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg></button>
+  <button class="tb close" id="close" title="Close"><svg viewBox="0 0 12 12"><path d="M1.5 1.5l9 9m0-9l-9 9" stroke="currentColor" stroke-width="1.3"/></svg></button>
+</div>
+<div id="app">
+  <nav>
+    <h6>Bully</h6>
+    <div class="navitem active" data-page="launch"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Launch</div>
+    <div class="navitem" data-page="perf"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h8l-1 8 10-12h-8z"/></svg>Performance</div>
+    <div class="navitem" data-page="esp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="1"/><path d="M3 21h18"/></svg>ESP</div>
+    <div class="navitem" data-page="light"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4.5"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2"/></svg>Lighting</div>
+    <div class="navitem" data-page="gfx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 13l3-3 2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>Renderer</div>
+    <div class="navitem" data-page="mods"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>Mods</div>
+    <div class="navitem" data-page="live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Live Data</div>
+    <div class="navitem" data-page="ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg>Intercom</div>
+    <div id="gamecard"><div class="row1"><span class="dot" id="dot"></span><span id="gstate">Not running</span></div><div class="sub" id="ginfo">Launch Bully from here</div></div>
+  </nav>
+
+  <main>
+    <!-- LAUNCH -->
+    <section class="page active" id="page-launch">
+      <h1>Launch</h1>
+      <p class="lede">Starts Bully patched: your desktop resolution is never touched.</p>
+      <div class="card">
+        <h3>Game</h3>
+        <div class="row"><div class="label"><b>Bully folder</b><span id="gamedir">…</span></div>
+          <button class="btn" id="browse">Browse…</button></div>
+        <div class="row" id="x64row"><div class="label"><b>64-bit remaster</b><span>bullyre_x64: the game rebuilt as 64-bit (no 2 GB memory limit), the new renderer, seamless doors. Uses the game's own display settings; the Window and Behaviour options below are the 32-bit game's</span></div>
+          <label class="switch"><input type="checkbox" id="x64"><i></i></label></div>
+        <div class="row" id="seamlessrow"><div class="label"><b>Seamless doors</b><span>The 64-bit remaster's doors: no fade to black, the room seen through the doorway and peopled before you go in. Off: the game's own doors, with their fade</span></div>
+          <label class="switch"><input type="checkbox" id="seamless"><i></i></label></div>
+        <div class="error" id="gamedirerr"></div>
+      </div>
+      <div class="card" id="wincard">
+        <h3>Window</h3>
+        <div class="row"><div class="label"><b>Windowed</b><span>Normal window with a title bar</span></div>
+          <label class="switch"><input type="checkbox" id="windowed" checked><i></i></label></div>
+        <div class="row"><div class="label"><b>Size</b></div>
+          <div class="chips"><span class="chip" data-r="1280x720">720p</span><span class="chip" data-r="1600x900">900p</span><span class="chip" data-r="1920x1080">1080p</span><span class="chip" data-r="2560x1440">1440p</span><span class="chip" data-r="2560x1080">UW 1080</span><span class="chip" data-r="3440x1440">UW 1440</span></div>
+          <input type="number" id="w" value="1600" min="640" max="7680"><span style="color:var(--muted)">×</span><input type="number" id="h" value="900" min="480" max="4320"></div>
+      </div>
+      <div class="card" id="behcard">
+        <h3>Behaviour</h3>
+        <div class="row"><div class="label"><b>Free mouse &amp; Windows key</b><span>The cursor is only held in the window while you're playing: pause (Esc) and it's yours. The Windows key works too</span></div>
+          <label class="switch"><input type="checkbox" id="mouse" checked><i></i></label></div>
+        <div class="row"><div class="label"><b>Keep running in the background</b><span>Don't pause or minimize when the game loses focus</span></div>
+          <label class="switch"><input type="checkbox" id="bg" checked><i></i></label></div>
+        <div class="row"><div class="label"><b>Run from bullyre's own exe</b><span>Experimental: bullyre_host.exe runs the game with the reversed code built in, instead of Bully loading bullyre.dll</span></div>
+          <label class="switch"><input type="checkbox" id="host"><i></i></label></div>
+      </div>
+      <button class="btn primary wide" id="launch">Launch Bully</button>
+      <div class="error" id="error"></div>
+      <div class="note" id="mousenote"></div>
+    </section>
+
+    <!-- PERFORMANCE -->
+    <section class="page" id="page-perf">
+      <h1>Performance</h1>
+      <p class="lede">The game's frame cap, and its speed: 1.00× means real time at any FPS.</p>
+      <div class="stats">
+        <div class="stat"><small>Frame rate</small><div id="s_fps">–<em>fps</em></div></div>
+        <div class="stat"><small>Game speed</small><div id="s_speed">–<em>×</em></div></div>
+      </div>
+      <div class="card">
+        <h3>Frame cap</h3>
+        <div class="row"><input type="range" id="fps" min="30" max="240" step="1" value="60"><span class="val" id="fpsval">60</span></div>
+        <div class="row"><div class="chips"><span class="chip" data-fps="30">30</span><span class="chip" data-fps="60">60</span><span class="chip" data-fps="120">120</span><span class="chip" data-fps="144">144</span><span class="chip" data-fps="165">165</span><span class="chip" data-fps="240">240</span></div>
+          <div style="flex:1"></div><span style="color:var(--muted);font-size:13px">Unlimited</span><label class="switch"><input type="checkbox" id="unl"><i></i></label></div>
+        <div class="row" id="fps_held" style="display:none;color:var(--muted);font-size:13px">Held at 60 until you're in the game: the game hangs if it starts up any faster.</div>
+      </div>
+    </section>
+
+    <!-- ESP -->
+    <section class="page" id="page-esp">
+      <h1>ESP</h1>
+      <p class="lede">Overlay drawn on top of the game window.</p>
+      <div class="card">
+        <div class="row"><div class="label"><b>Enable overlay</b></div><label class="switch"><input type="checkbox" id="esp"><i></i></label></div>
+      </div>
+      <div class="card" id="espopts">
+        <h3>Show</h3>
+        <div class="grid2">
+          <div class="row"><div class="label"><b>Boxes</b></div><label class="switch"><input type="checkbox" id="boxes" checked><i></i></label></div>
+          <div class="row"><div class="label"><b>Health bars</b></div><label class="switch"><input type="checkbox" id="health" checked><i></i></label></div>
+          <div class="row"><div class="label"><b>HP / distance</b></div><label class="switch"><input type="checkbox" id="text" checked><i></i></label></div>
+          <div class="row"><div class="label"><b>Snaplines</b></div><label class="switch"><input type="checkbox" id="snap"><i></i></label></div>
+          <div class="row"><div class="label"><b>Vehicles</b></div><label class="switch"><input type="checkbox" id="veh" checked><i></i></label></div>
+        </div>
+        <div class="row" style="border-top:1px solid #36383d"><div class="label" style="flex:none;width:90px"><b>Range</b></div>
+          <input type="range" id="range" min="20" max="500" step="10" value="150"><span class="val" id="rangeval">150 m</span></div>
+      </div>
+    </section>
+
+    <!-- LIGHTING -->
+    <section class="page" id="page-light">
+      <h1>Lighting</h1>
+      <p class="lede">Adjusts the game's own day/night lighting tables live. Changes apply at every hour and weather.</p>
+      <div class="card">
+        <div class="row"><div class="label"><b>Custom lighting</b><span>Off = the game's original lighting</span></div>
+          <label class="switch"><input type="checkbox" id="l_on"><i></i></label></div>
+        <div class="row"><div class="presetbar" style="flex:1">
+          <select id="preset"></select>
+          <button class="btn" id="psave">Save as…</button>
+          <button class="btn danger" id="pdel">Delete</button></div></div>
+        <div class="row" id="saverow" style="display:none"><input type="text" id="pname" placeholder="Preset name" style="flex:1" maxlength="40">
+          <button class="btn primary" id="pok">Save</button><button class="btn" id="pcancel">Cancel</button></div>
+      </div>
+      <div id="lightopts">
+        <div class="card">
+          <h3>Light</h3>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Ambient light</b><span>people, cars, props</span></div><input type="range" id="l_amb" min="0" max="2.5" step="0.01" value="1"><span class="val" data-fmt="pct" id="l_ambv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Sun / fill light</b><span>on characters</span></div><input type="range" id="l_sun" min="0" max="2.5" step="0.01" value="1"><span class="val" data-fmt="pct" id="l_sunv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Warmth</b></div><input type="range" id="l_warm" min="-1" max="1" step="0.01" value="0"><span class="val" data-fmt="signed" id="l_warmv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Contrast</b></div><input type="range" id="l_con" min="0.5" max="1.6" step="0.01" value="1"><span class="val" data-fmt="pct" id="l_conv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Sky</b></div><input type="range" id="l_sky" min="0" max="2.5" step="0.01" value="1"><span class="val" data-fmt="pct" id="l_skyv"></span></div>
+        </div>
+        <div class="card">
+          <h3>Color filter</h3>
+          <p class="note" style="margin:0 0 8px">Tints the whole screen. The world itself is pre-lit, so this is the main way to change its look.</p>
+          <div class="row"><div class="seg" id="l_filter"><span data-v="game" class="on">Game</span><span data-v="off">Off</span><span data-v="tint">Custom tint</span></div>
+            <div style="flex:1"></div><input type="color" id="l_tint" value="#fff0dc"></div>
+          <div class="row" id="tintrow"><div class="label" style="flex:none;width:120px"><b>Tint strength</b></div><input type="range" id="l_tstr" min="0" max="1" step="0.01" value="0.3"><span class="val" data-fmt="pct0" id="l_tstrv"></span></div>
+        </div>
+        <div class="card">
+          <h3>Atmosphere</h3>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Draw distance</b><span>costs FPS</span></div><input type="range" id="l_dist" min="0.5" max="3" step="0.05" value="1"><span class="val" data-fmt="pct" id="l_distv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Fog</b><span>− closer, + further</span></div><input type="range" id="l_fog" min="-1" max="1" step="0.01" value="0"><span class="val" data-fmt="signed" id="l_fogv"></span></div>
+        </div>
+        <button class="btn" id="lreset">Reset sliders</button>
+      </div>
+      <div class="error" id="lerror"></div>
+    </section>
+    <!-- RENDERER -->
+    <section class="page" id="page-gfx">
+      <h1>Renderer</h1>
+      <p class="lede">The new renderer draws Bully on Vulkan instead of Direct3D 9, looking the same. On top of it you can change the picture and swap the game's textures.</p>
+      <div class="stats">
+        <div class="stat"><small>Renderer</small><div id="g_state" style="font-size:22px">–</div></div>
+        <div class="stat"><small>Cost per frame</small><div id="g_ms">–<em>ms</em></div></div>
+      </div>
+      <div class="card">
+        <div class="row"><div class="label"><b>Use the new renderer</b><span>Applies live. F8 in the game switches it too</span></div>
+          <label class="switch"><input type="checkbox" id="g_on"><i></i></label></div>
+        <div class="row" id="g_gpurow" style="display:none"><div class="label"><span id="g_gpu"></span></div></div>
+      </div>
+      <div class="card">
+        <h3>Camera</h3>
+        <div class="row"><div class="label" style="flex:none;width:120px"><b>Field of view</b><span>85° is the game's</span></div><input type="range" id="g_fov" min="50" max="130" step="1" value="85"><span class="val" data-fmt="deg" id="g_fovv"></span></div>
+        <div class="row"><div class="label"><b>Ultrawide / any aspect ratio</b><span>Wider windows see more at the sides instead of stretching. Pick a size like 2560×1080 on the Launch page</span></div>
+          <label class="switch"><input type="checkbox" id="g_horp" checked><i></i></label></div>
+        <div class="note" style="margin:6px 0 0">Works with either renderer, applies live.</div>
+      </div>
+      <div class="card">
+        <h3>Weather</h3>
+        <div class="row"><div class="chips" style="gap:8px">
+            <button class="btn" data-weather="0">☀ Clear</button><button class="btn" data-weather="1">☁ Overcast</button><button class="btn" data-weather="2">🌧 Rain</button></div>
+          <div style="flex:1"></div><span id="w_now" style="color:var(--muted);font-size:13px">–</span></div>
+        <div class="row"><button class="btn primary" id="w_demo">▶ Rain demo</button><button class="btn" id="w_dry">Dry the streets</button>
+          <div style="flex:1"></div><div style="width:150px"><div style="font-size:11.5px;color:var(--muted);margin-bottom:3px" id="w_wetlabel">Streets: dry</div><div class="bar"><i id="w_wetbar" style="width:0;background:#4aa3ff"></i></div></div></div>
+        <div class="note" style="margin:6px 0 0">Rain demo: dries the streets, turns the sky overcast, then starts the rain 6 seconds later, so the puddles form on camera (about 30 s to full). Needs a loaded game (not the title screen).</div>
+      </div>
+      <div id="gfxopts">
+        <div class="card">
+          <h3>Picture</h3>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Exposure</b></div><input type="range" id="g_exp" min="0.2" max="3" step="0.01" value="1"><span class="val" data-fmt="pct" id="g_expv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Contrast</b></div><input type="range" id="g_con" min="0.3" max="2" step="0.01" value="1"><span class="val" data-fmt="pct" id="g_conv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Saturation</b></div><input type="range" id="g_sat" min="0" max="2.5" step="0.01" value="1"><span class="val" data-fmt="pct" id="g_satv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Gamma</b><span>&lt; 100% darker mids</span></div><input type="range" id="g_gam" min="0.4" max="2.5" step="0.01" value="1"><span class="val" data-fmt="pct" id="g_gamv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Sharpen</b></div><input type="range" id="g_sharp" min="0" max="2" step="0.01" value="0"><span class="val" data-fmt="pct0" id="g_sharpv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Vignette</b></div><input type="range" id="g_vig" min="0" max="1" step="0.01" value="0"><span class="val" data-fmt="pct0" id="g_vigv"></span></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Tint</b></div><input type="range" id="g_tstr" min="0" max="1" step="0.01" value="0"><span class="val" data-fmt="pct0" id="g_tstrv"></span><input type="color" id="g_tint" value="#ffe0b0"></div>
+          <div class="row"><div style="flex:1"></div><button class="btn" id="g_reset">Reset picture</button></div>
+        </div>
+        <div class="card">
+          <h3>Wet streets</h3>
+          <div class="row"><div class="seg" id="g_wet"><span data-v="off">Off</span><span data-v="auto" class="on">When it rains</span><span data-v="always">Always</span></div></div>
+          <div class="row"><div class="label" style="flex:none;width:120px"><b>Strength</b></div><input type="range" id="g_wetamt" min="0" max="1" step="0.01" value="0.85"><span class="val" data-fmt="pct0" id="g_wetamtv"></span></div>
+          <div class="note" style="margin:6px 0 0">Puddles that mirror the world, rain ripples and darker damp ground, drawn into the scene before the game's own glow and HUD.</div>
+        </div>
+        <div class="card">
+          <h3>Textures</h3>
+          <div class="row"><div class="seg" id="g_tex"><span data-v="game" class="on">Game</span><span data-v="replaced">Replaced</span><span data-v="checker">Checkerboard</span><span data-v="white">Untextured</span></div></div>
+          <div class="note" id="g_counts" style="margin:2px 0 6px"></div>
+          <div class="row"><button class="btn" id="g_export">Export textures</button><button class="btn" id="g_open">Open folder</button><button class="btn primary" id="g_reload">Reload replacements</button></div>
+          <div class="note" id="g_exported"></div>
+          <div class="note"><b>Re-skinning:</b> Export saves every texture the game has loaded so far as a PNG in <i>bullygfx_textures\export</i>, named after the game's file (e.g. <i>zrc_asphalt_swap_d</i> is the bus yard tarmac; _d colour, _n normal map, _s shine). Edit a copy, save it under the same name in <i>bullygfx_textures\replace</i>, pick <b>Replaced</b> and press Reload. Any size works. Walk around first so the textures you want are loaded.</div>
+        </div>
+      </div>
+    </section>
+    <!-- MODS -->
+    <section class="page" id="page-mods">
+      <h1>Mods</h1>
+      <p class="lede">Mods load straight from their own folders: nothing gets copied into the game. Switch them on and off while you play and the buildings and textures swap on the spot.</p>
+      <div class="card">
+        <div id="mods_list"></div>
+        <div class="row"><button class="btn primary" id="mods_add">+ Add a mod folder</button><div style="flex:1"></div><span id="mods_state" style="color:var(--muted);font-size:13px"></span></div>
+        <div class="note" id="mods_err" style="color:#ff7a7a;display:none"></div>
+        <div class="note" id="mods_applied" style="display:none"></div>
+      </div>
+      <div class="card">
+        <h3>How it works</h3>
+        <div class="note" style="margin:0">Pick the folder the mod came in: the one with its <i>World.img</i> and <i>World.dir</i> (or a <i>Stream</i> folder with them), and its texture folders. Only what the mod changes is used, so several mods can be on at once; when two change the same thing, the lower one in the list wins (▲ moves one up).<br><br>
+        Textures are read as <b>PNG</b> when there is a PNG copy with the same name (edit those in anything), otherwise from the mod's own files. The first time, PNGs are packed for the game once and cached, so a new mod can stutter for a moment while that happens.<br><br>
+        Switching live: buildings, props and texture packs change right away. People and cars keep their look until they respawn, and a few kinds of files only change after a restart (the count shows above).</div>
+      </div>
+    </section>
+    <!-- LIVE DATA -->
+    <section class="page" id="page-live">
+      <div class="hero">
+        <h1>Bully, live <span class="live-pill off" id="lv_pill"><i></i>OFFLINE</span></h1>
+        <p>Everything bullydumper pulled out of the game, read straight from its memory while it runs.</p>
+        <div class="tiles">
+          <div class="tile"><b id="lv_offsets">–</b><span>Offsets mapped</span></div>
+          <div class="tile"><b id="lv_classes">–</b><span>Classes</span></div>
+          <div class="tile"><b id="lv_natives">–</b><span>Script functions</span></div>
+          <div class="tile"><b id="lv_functions">–</b><span>Functions</span></div>
+          <div class="tile"><b id="lv_shaders">–</b><span>Shaders translated</span></div>
+        </div>
+      </div>
+      <div class="error" id="lv_error"></div>
+      <div class="cards2">
+        <div class="card"><h3>Jimmy</h3>
+          <dl class="kv">
+            <dt>Position</dt><dd class="mono" id="lv_pos">–</dd>
+            <dt>Heading</dt><dd id="lv_heading">–</dd>
+            <dt>Health</dt><dd id="lv_health">–</dd>
+          </dl>
+          <div class="bar"><i id="lv_hbar" style="width:0"></i></div>
+          <dl class="kv" style="margin-top:8px">
+            <dt>Money</dt><dd id="lv_money">–</dd>
+            <dt>Trouble meter</dt><dd id="lv_trouble">–</dd>
+            <dt>Times busted</dt><dd id="lv_busted">–</dd>
+            <dt>Riding</dt><dd id="lv_vehicle">–</dd>
+          </dl>
+        </div>
+        <div class="card"><h3>World</h3>
+          <div class="bigclock" id="lv_clock">––:––</div>
+          <dl class="kv" style="margin-top:6px">
+            <dt>Clock</dt><dd id="lv_clockstate">–</dd>
+            <dt>Chapter</dt><dd id="lv_chapter">–</dd>
+            <dt>Area</dt><dd id="lv_area">–</dd>
+            <dt>Peds loaded</dt><dd id="lv_pedcount">–</dd>
+            <dt>Vehicles loaded</dt><dd id="lv_vehcount">–</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="cards2">
+        <div class="card"><h3>Around Jimmy</h3><div class="plist" id="lv_peds"><em>–</em></div></div>
+        <div class="card"><h3>Vehicles nearby</h3><div class="plist" id="lv_vehs"><em>–</em></div></div>
+      </div>
+      <div class="card explorer">
+        <h3>Explorer</h3>
+        <div class="bar2"><input type="text" id="lv_q" placeholder="Search names, addresses, script functions… e.g. money, CPed, 0x00C1AEA8"><select id="lv_group"><option value="">All groups</option></select></div>
+        <table class="dt"><colgroup><col style="width:24%"><col style="width:24%"><col style="width:8%"><col style="width:18%"><col style="width:26%"></colgroup>
+          <thead><tr><th>Name</th><th>Address</th><th>Type</th><th>Value</th><th>Notes</th></tr></thead><tbody id="lv_rows"></tbody></table>
+        <div class="pager"><button class="btn" id="lv_prev">‹</button><span id="lv_range">–</span><button class="btn" id="lv_next">›</button>
+          <span style="flex:1"></span><span>Struct fields (ped+…, CPed+…) are read from Jimmy, vehicle ones from what he's riding.</span></div>
+      </div>
+    </section>
+    <!-- INTERCOM -->
+    <section class="page" id="page-ic">
+      <h1>Intercom</h1>
+      <p class="lede">Your mic, made to sound like the boys' dorm PA. Hold your key to talk.</p>
+      <div class="stats">
+        <div class="stat"><small>Mic</small><div id="ic_live" style="font-size:22px">off</div></div>
+        <div class="stat"><small>Where you are</small><div id="ic_where" style="font-size:22px">–</div></div>
+      </div>
+      <div class="card">
+        <div class="row"><div class="label"><b>Enable intercom</b></div><label class="switch"><input type="checkbox" id="ic_on"><i></i></label></div>
+        <div class="row"><div class="label"><b>Push-to-talk</b><span>Works while the game is focused. Mouse side buttons work too</span></div>
+          <button class="btn" id="ic_keybtn" style="min-width:130px">V</button>
+          <input type="hidden" id="ic_vk" value="86"><input type="hidden" id="ic_key" value="V"></div>
+        <div class="row"><div class="label"><b>Only in the boys' dorm</b><span>Off = talk anywhere</span></div><label class="switch"><input type="checkbox" id="ic_dorm" checked><i></i></label></div>
+      </div>
+      <div class="card">
+        <h3>Sound</h3>
+        <div class="row"><div class="label" style="flex:none;width:120px"><b>Microphone</b></div><select id="ic_mic" style="flex:1"></select></div>
+        <div class="row"><div class="label" style="flex:none;width:120px"><b>Volume</b></div><input type="range" id="ic_vol" min="0" max="3" step="0.05" value="1"><span class="val" data-fmt="pct" id="ic_volv"></span></div>
+        <div class="row"><div class="label" style="flex:none;width:120px"><b>Hallway echo</b></div><input type="range" id="ic_room" min="0" max="1" step="0.01" value="0.35"><span class="val" data-fmt="pct0" id="ic_roomv"></span></div>
+        <div class="row"><div class="label"><b>Chime before talking</b><span>The one before Ms. Danvers' announcements</span></div><label class="switch"><input type="checkbox" id="ic_chime" checked><i></i></label></div>
+      </div>
+      <div class="note">It plays through your speakers/headset, mixed with the game, so it's in recordings and streams. With speakers, keep the mic away from them.</div>
+      <div class="error" id="ic_error"></div>
+    </section>
+  </main>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const post = m => window.ipc.postMessage(m);
+
+  // --- window chrome ---
+  $("drag").addEventListener("mousedown", e => { if (e.button === 0) post("drag"); });
+  $("min").onclick = () => post("min");
+  $("close").onclick = () => post("close");
+
+  // --- navigation ---
+  document.querySelectorAll(".navitem").forEach(n => n.onclick = () => {
+    document.querySelectorAll(".navitem").forEach(x => x.classList.toggle("active", x === n));
+    document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === "page-" + n.dataset.page));
+    post("viewer|" + (n.dataset.page === "live" ? 1 : 0));
+  });
+
+  // --- state: every change sends everything ---
+  const checks = ["windowed", "mouse", "bg", "host", "x64", "seamless", "unl", "esp", "boxes", "health", "text", "snap", "veh", "l_on", "ic_on", "ic_dorm", "ic_chime", "g_on", "g_horp"];
+  const values = ["w", "h", "fps", "range", "l_amb", "l_sun", "l_warm", "l_con", "l_sky", "l_tstr", "l_dist", "l_fog", "l_tint", "ic_vk", "ic_key", "ic_mic", "ic_vol", "ic_room",
+    "g_exp", "g_con", "g_sat", "g_gam", "g_sharp", "g_vig", "g_tstr", "g_tint", "g_fov", "g_wetamt"];
+  let filter = "game";
+  let gtex = "game";
+  let gwet = "auto";
+  function stateString() {
+    const kv = checks.map(id => id + "=" + ($(id).checked ? 1 : 0))
+      .concat(values.map(id => id + "=" + $(id).value))
+      .concat(["l_filter=" + filter, "g_tex=" + gtex, "g_wet=" + gwet]);
+    return kv.join("|");
+  }
+  const fmt = {
+    pct: v => Math.round(v * 100) + "%", pct0: v => Math.round(v * 100) + "%",
+    signed: v => (v > 0 ? "+" : "") + Math.round(v * 100),
+    deg: v => Math.round(v) + "°",
+  };
+  function refresh() {
+    $("fpsval").textContent = $("unl").checked ? "∞" : $("fps").value;
+    $("fps").disabled = $("unl").checked;
+    $("rangeval").textContent = $("range").value + " m";
+    document.querySelectorAll(".val[data-fmt]").forEach(v => {
+      const input = $(v.id.slice(0, -1)); v.textContent = fmt[v.dataset.fmt](parseFloat(input.value));
+    });
+    document.querySelectorAll("#l_filter span").forEach(s => s.classList.toggle("on", s.dataset.v === filter));
+    $("tintrow").style.display = filter === "tint" ? "" : "none";
+    $("l_tint").style.visibility = filter === "tint" ? "visible" : "hidden";
+    $("lightopts").classList.toggle("disabled-block", !$("l_on").checked);
+    $("espopts").classList.toggle("disabled-block", !$("esp").checked);
+    $("gfxopts").classList.toggle("disabled-block", !$("g_on").checked);
+    $("wincard").classList.toggle("disabled-block", $("x64").checked);
+    $("seamlessrow").classList.toggle("disabled-block", !$("x64").checked);
+    $("behcard").classList.toggle("disabled-block", $("x64").checked);
+    document.querySelectorAll("#g_tex span").forEach(s => s.classList.toggle("on", s.dataset.v === gtex));
+    document.querySelectorAll("#g_wet span").forEach(s => s.classList.toggle("on", s.dataset.v === gwet));
+    $("ic_keybtn").textContent = capturing ? "Press a key…" : ($("ic_key").value || "None");
+    const r = $("w").value + "x" + $("h").value;
+    document.querySelectorAll("[data-r]").forEach(c => c.classList.toggle("on", c.dataset.r === r));
+    document.querySelectorAll("[data-fps]").forEach(c => c.classList.toggle("on", !$("unl").checked && c.dataset.fps === $("fps").value));
+  }
+  function send() { refresh(); post("state|" + stateString()); }
+  checks.concat(values).forEach(id => $(id).addEventListener("input", send));
+  document.querySelectorAll("[data-r]").forEach(c => c.onclick = () => {
+    const [w, h] = c.dataset.r.split("x"); $("w").value = w; $("h").value = h; send();
+  });
+  document.querySelectorAll("[data-fps]").forEach(c => c.onclick = () => { $("fps").value = c.dataset.fps; $("unl").checked = false; send(); });
+  document.querySelectorAll("#l_filter span").forEach(s => s.onclick = () => { filter = s.dataset.v; send(); });
+  document.querySelectorAll("#g_tex span").forEach(s => s.onclick = () => { gtex = s.dataset.v; send(); });
+  document.querySelectorAll("#g_wet span").forEach(s => s.onclick = () => { gwet = s.dataset.v; send(); });
+  $("g_export").onclick = () => { post("gfx_export"); $("g_exported").textContent = "Exporting…"; };
+  $("g_reload").onclick = () => post("gfx_reload");
+  $("g_open").onclick = () => post("gfx_open");
+  $("g_reset").onclick = () => {
+    for (const [id, v] of [["g_exp", 1], ["g_con", 1], ["g_sat", 1], ["g_gam", 1], ["g_sharp", 0], ["g_vig", 0], ["g_tstr", 0]]) $(id).value = v;
+    send();
+  };
+  $("launch").onclick = () => { send(); post("launch"); };
+  $("browse").onclick = () => post("browse");
+  window.setGameDir = (path, problem, haveX64) => {
+    $("gamedir").textContent = path;
+    $("gamedirerr").textContent = problem;
+    $("x64row").style.display = haveX64 ? "" : "none";
+    $("seamlessrow").style.display = haveX64 ? "" : "none";
+  };
+  $("lreset").onclick = () => {
+    for (const [id, v] of [["l_amb", 1], ["l_sun", 1], ["l_warm", 0], ["l_con", 1], ["l_sky", 1], ["l_tstr", 0.3], ["l_dist", 1], ["l_fog", 0]]) $(id).value = v;
+    filter = "game"; send();
+  };
+
+  // --- push-to-talk key capture ---
+  let capturing = false;
+  $("ic_keybtn").onclick = e => { capturing = true; refresh(); e.stopPropagation(); };
+  function setKey(vk, label) { capturing = false; $("ic_vk").value = vk; $("ic_key").value = label; send(); }
+  function keyName(e) {
+    const c = e.code || e.key;
+    if (c.startsWith("Key")) return c.slice(3);
+    if (c.startsWith("Digit")) return c.slice(5);
+    if (c.startsWith("Numpad")) return "Num " + c.slice(6);
+    return c.replace("Left", " L").replace("Right", " R");
+  }
+  window.addEventListener("keydown", e => {
+    if (!capturing) return;
+    e.preventDefault();
+    if (e.key === "Escape") { capturing = false; refresh(); return; }
+    setKey(e.keyCode, keyName(e));
+  }, true);
+  window.addEventListener("mousedown", e => {
+    if (!capturing) return;
+    const map = { 1: [4, "Mouse 3"], 3: [5, "Mouse 4"], 4: [6, "Mouse 5"] };
+    if (map[e.button]) { e.preventDefault(); setKey(...map[e.button]); }
+  }, true);
+  window.addEventListener("mouseup", e => { if (e.button === 3 || e.button === 4) e.preventDefault(); }, true);
+
+  // --- presets ---
+  $("preset").onchange = () => post("preset_load|" + $("preset").value);
+  $("psave").onclick = () => { $("saverow").style.display = ""; $("pname").value = ""; $("pname").focus(); };
+  $("pcancel").onclick = () => { $("saverow").style.display = "none"; };
+  $("pok").onclick = () => {
+    const n = $("pname").value.trim().replace(/[|=\r\n]/g, "");
+    if (n) { post("preset_save|" + n); $("saverow").style.display = "none"; }
+  };
+  $("pname").addEventListener("keydown", e => { if (e.key === "Enter") $("pok").click(); if (e.key === "Escape") $("pcancel").click(); });
+  $("pdel").onclick = () => { if ($("preset").value !== "Game default") post("preset_delete|" + $("preset").value); };
+
+  // --- live data ---
+  const FACTIONS = ["Prefects", "Nerds", "Jocks", "Dropouts", "Greasers", "Preppies", "Students", "Cops", "Teachers", "Townspeople", "Shopkeepers", "Bullies", "Adults", "Jimmy"];
+  const AREAS = { 0: "Bullworth", 14: "Boys' dorm" };
+  let lvFirst = 0, lvTotal = 0, lvTimer = null, lvValues = [];
+  const nf = n => n.toLocaleString("en-US");
+  function countUp(el, to) {
+    const t0 = performance.now();
+    const step = t => { const k = Math.min(1, (t - t0) / 700); el.textContent = nf(Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  function lvQuery() { post("viewer_query|" + $("lv_q").value + "\t" + $("lv_group").value + "\t" + lvFirst); }
+  $("lv_q").addEventListener("input", () => { clearTimeout(lvTimer); lvTimer = setTimeout(() => { lvFirst = 0; lvQuery(); }, 150); });
+  $("lv_group").onchange = () => { lvFirst = 0; lvQuery(); };
+  $("lv_prev").onclick = () => { if (lvFirst > 0) { lvFirst = Math.max(0, lvFirst - 80); lvQuery(); } };
+  $("lv_next").onclick = () => { if (lvFirst + 80 < lvTotal) { lvFirst += 80; lvQuery(); } };
+  const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  window.setViewerMeta = m => {
+    $("lv_error").textContent = m.error || "";
+    if (m.error) return;
+    countUp($("lv_offsets"), m.offsets); countUp($("lv_classes"), m.classes); countUp($("lv_natives"), m.natives);
+    countUp($("lv_functions"), m.functions); countUp($("lv_shaders"), m.shaders);
+    const sel = $("lv_group");
+    if (sel.options.length <= 1) for (const g of m.groups) { const o = document.createElement("option"); o.value = o.textContent = g; sel.appendChild(o); }
+    lvQuery();
+  };
+  window.setViewerRows = (total, first, rows) => {
+    lvTotal = total; lvFirst = first; lvValues = [];
+    $("lv_range").textContent = total ? `${nf(first + 1)}–${nf(first + rows.length)} of ${nf(total)}` : "no matches";
+    $("lv_rows").innerHTML = rows.map((r, i) => `<tr><td title="${esc(r[1])}">${esc(r[0])}</td><td class="mono" title="${esc(r[2])}">${esc(r[2])}</td><td>${esc(r[3])}</td><td class="v" id="lvv${i}">…</td><td class="n" title="${esc(r[4])}">${esc(r[4])}</td></tr>`).join("");
+  };
+  window.setViewerValues = vals => {
+    vals.forEach((v, i) => {
+      const td = $("lvv" + i); if (!td) return;
+      if (lvValues[i] !== undefined && lvValues[i] !== v) { td.classList.add("flash"); setTimeout(() => td.classList.remove("flash"), 30); }
+      lvValues[i] = v; td.textContent = v;
+    });
+  };
+  window.setLive = d => {
+    const pill = $("lv_pill");
+    const live = !!(d && d.inGame);
+    pill.className = "live-pill" + (live ? "" : " off"); pill.lastChild.textContent = live ? "LIVE" : (d ? "IN MENUS" : "OFFLINE");
+    if (!d) return;
+    const pad = n => String(n).padStart(2, "0");
+    $("lv_clock").textContent = pad(d.hour) + ":" + pad(d.minute);
+    $("lv_clockstate").textContent = d.clockPaused ? "paused" : "running";
+    $("lv_chapter").textContent = d.chapter;
+    $("lv_area").textContent = (AREAS[d.area] || "area") + " (" + d.area + ")";
+    if (!d.inGame) return;
+    $("lv_pos").textContent = d.pos.map(v => v.toFixed(2)).join("  ");
+    $("lv_heading").textContent = d.heading.toFixed(0) + "°";
+    $("lv_health").textContent = d.health.toFixed(0) + " / " + d.maxHealth.toFixed(0);
+    $("lv_hbar").style.width = Math.max(0, Math.min(100, 100 * d.health / (d.maxHealth || 1))) + "%";
+    $("lv_money").textContent = "$" + (d.money / 100).toFixed(2);
+    $("lv_trouble").textContent = d.trouble;
+    $("lv_busted").textContent = d.busted;
+    $("lv_vehicle").textContent = d.vehicle;
+    $("lv_pedcount").textContent = d.pedCount + " / " + d.pedCap;
+    $("lv_vehcount").textContent = d.vehCount + " / " + d.vehCap;
+    $("lv_peds").innerHTML = d.peds.length ? d.peds.map(p => `<div><span class="mono">${p.dist.toFixed(1)} m</span><span>${FACTIONS[p.faction] || "faction " + p.faction}</span><em>#${p.model}</em><div class="bar" style="margin:0;border:0;padding:0;display:block"><i style="width:${Math.max(0, Math.min(100, p.health))}%"></i></div></div>`).join("") : "<em>nobody around</em>";
+    $("lv_vehs").innerHTML = d.vehicles.length ? d.vehicles.map(v => `<div><span class="mono">${v.dist.toFixed(1)} m</span><span>model #${v.model}</span><em>${v.health.toFixed(0)} hp</em><span></span></div>`).join("") : "<em>none loaded</em>";
+  };
+
+  // --- called from Rust ---
+  window.loadState = s => {
+    for (const kv of s.split("|")) {
+      const i = kv.indexOf("="); if (i < 0) continue;
+      const k = kv.slice(0, i), v = kv.slice(i + 1);
+      if (k === "l_filter") filter = v;
+      else if (k === "g_tex") gtex = v;
+      else if (k === "g_wet") gwet = v;
+      else if (checks.includes(k)) $(k).checked = v === "1";
+      else if (values.includes(k)) $(k).value = v;
+    }
+    send();
+  };
+  window.setPresets = (names, selected) => {
+    const sel = $("preset"); sel.innerHTML = "";
+    for (const n of names) { const o = document.createElement("option"); o.value = o.textContent = n; sel.appendChild(o); }
+    sel.value = selected;
+    $("pdel").disabled = selected === "Game default";
+  };
+  window.setStatus = (running, info, error, lightError, mouseNote) => {
+    $("dot").classList.toggle("on", running);
+    $("gstate").textContent = running ? "Bully is running" : "Not running";
+    $("ginfo").textContent = info;
+    $("launch").disabled = running;
+    $("launch").textContent = running ? "Bully is running" : "Launch Bully";
+    $("error").textContent = error; $("lerror").textContent = lightError; $("mousenote").textContent = mouseNote;
+  };
+  window.setMics = (names, selected) => {
+    const sel = $("ic_mic"); sel.innerHTML = "";
+    const add = (v, t) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); };
+    add(-1, "Default microphone");
+    names.forEach((n, i) => add(i, n));
+    sel.value = selected;
+  };
+  window.setIntercom = (talking, inDorm, error) => {
+    const on = $("ic_on").checked;
+    $("ic_live").innerHTML = !on ? "off" : talking ? "<span style='color:var(--green)'>● talking</span>" : "ready";
+    $("ic_where").textContent = inDorm ? "Boys' dorm" : "Not in the dorm";
+    $("ic_error").textContent = error;
+  };
+  document.querySelectorAll("[data-weather]").forEach(b => b.onclick = () => post("weather|" + b.dataset.weather));
+  $("w_demo").onclick = () => post("weather_demo");
+  $("w_dry").onclick = () => post("weather_dry");
+  const WEATHER = ["Clear", "Overcast", "Raining", "Clear (3)", "Clear (4)"];
+  $("mods_add").onclick = () => post("mods_add");
+  window.setMods = (mods, running, applied, err) => {
+    const list = $("mods_list");
+    list.innerHTML = "";
+    if (!mods.length) {
+      const e = document.createElement("div");
+      e.className = "note"; e.style.margin = "0 0 8px";
+      e.textContent = "No mods yet. Add the folder a mod came in.";
+      list.appendChild(e);
+    }
+    mods.forEach(([path, on, info], i) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const name = path.split(/[\\/]/).filter(Boolean).pop() || path;
+      let detail = path;
+      if (info) {
+        const [changed, deleted, textures, error] = info.split("|");
+        detail = error ? "⚠ " + error : [changed + " files changed", deleted > 0 ? deleted + " old models removed" : "", textures > 0 ? Number(textures).toLocaleString() + " textures" : ""].filter(Boolean).join(" · ");
+      }
+      row.innerHTML = '<div class="label"><b></b><span></span></div>' +
+        (i > 0 ? '<button class="btn" data-a="up" title="Move up (lower wins)">▲</button>' : "") +
+        '<button class="btn" data-a="open" title="Open the folder">📂</button><button class="btn" data-a="remove" title="Remove from the list (the folder stays)">✕</button>' +
+        '<label class="switch"><input type="checkbox"><i></i></label>';
+      row.querySelector("b").textContent = name;
+      row.querySelector("span").textContent = detail;
+      row.querySelector("span").title = path;
+      const box = row.querySelector("input");
+      box.checked = on;
+      box.onchange = () => post("mods_toggle|" + i + "|" + (box.checked ? 1 : 0));
+      row.querySelectorAll("button").forEach(b => b.onclick = () => post("mods_" + b.dataset.a + "|" + i));
+      list.appendChild(row);
+    });
+    $("mods_state").textContent = running ? "Game running: changes apply live" : "Applies when the game starts";
+    $("mods_err").style.display = err ? "" : "none";
+    $("mods_err").textContent = err;
+    $("mods_applied").style.display = running && applied ? "" : "none";
+    $("mods_applied").textContent = applied;
+  };
+  window.setGfx = (running, state, gpu, ms, named, replaced, exported, weather, wetness) => {
+    const wn = parseInt(weather);
+    $("w_now").textContent = running && weather !== "" ? "Now: " + (WEATHER[wn] || "weather " + wn) : "game not running";
+    const wv = parseFloat(wetness) || 0;
+    $("w_wetbar").style.width = Math.round(wv * 100) + "%";
+    $("w_wetlabel").textContent = wv <= 0.001 ? "Streets: dry" : wv >= 0.999 ? "Streets: soaked" : "Streets: " + Math.round(wv * 100) + "% wet";
+    const on = state === "on";
+    $("g_state").innerHTML = !running ? "game not running" : state === "" ? "loading…" : on ? "<span style='color:var(--green)'>● new</span>" : state.startsWith("failed") ? "<span style='color:var(--red)'>failed</span>" : "Direct3D 9";
+    $("g_ms").innerHTML = (running && on && ms ? parseFloat(ms).toFixed(1) : "–") + "<em>ms</em>";
+    $("g_gpurow").style.display = running && gpu ? "" : "none";
+    $("g_gpu").textContent = state.startsWith("failed") ? state : gpu ? "Vulkan on " + gpu : "";
+    $("g_counts").textContent = running && on ? (named || 0) + " textures named · " + (replaced || 0) + " replaced" : "";
+    if (exported) $("g_exported").textContent = exported;
+  };
+  window.setStats = (fps, speed, paused, held) => {
+    $("fps_held").style.display = held ? "" : "none";
+    $("s_fps").innerHTML = (fps == null ? "–" : Math.round(fps)) + "<em>fps</em>";
+    $("s_speed").innerHTML = paused ? "paused" : (speed == null ? "–" : speed.toFixed(2)) + (paused ? "" : "<em>×</em>");
+  };
+  refresh();
+  setTimeout(() => post("ready"), 0);
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+build/
+tools/ghidra_*_PUBLIC/
+tools/jdk*/
+tools/downloads/
+ghidra/
+*.user
+decomp/
+*_out.txt
+tests/*.png
+tests/*.jpg
+tests/__pycache__/
+decomp_all/

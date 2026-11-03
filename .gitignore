@@ -1,0 +1,23 @@
+# Build outputs
+target/
+build/
+build64/
+bin/
+*.obj
+*.pdb
+*.ilk
+*.user
+*.suo
+
+# IDEs
+.vs/
+.idea/
+.vscode/
+
+# Logs and test outputs
+*_log.txt
+*_out.txt
+
+# Archives
+*.zip
+

@@ -1,0 +1,19 @@
+[package]
+name = "bullymenu"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tao = "0.37"
+wry = "0.57"
+miniz_oxide = "0.8"
+
+[build-dependencies]
+miniz_oxide = "0.8"
+
+[profile.release]
+opt-level = 3
+
+# (build.rs deflates ~100 MB of the bundled game: fast, not debug-slow)
+[profile.release.build-override]
+opt-level = 3
